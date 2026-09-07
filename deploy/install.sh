@@ -10,7 +10,7 @@
 #     Janus manages), and — when asked — Redis and PostgreSQL
 #   * creates the `janus` system user, /opt/janus and /etc/janus
 #   * syncs this checkout into /opt/janus and builds the venv
-#   * builds the front end if Node is available
+#   * builds the front end with Bun if it is available (installed if absent)
 #   * writes /etc/janus/janus.env on first run (generates SECRET_KEY); never
 #     overwrites an existing one
 #   * installs the systemd units, runs migrations, starts the web tier, the
@@ -20,7 +20,7 @@
 #   --redis            install + enable a local Redis (shared job queue)
 #   --postgres         install + enable a local PostgreSQL, create the janus DB
 #   --no-caddy         do NOT install Caddy (you manage it elsewhere)
-#   --no-build         skip the front-end build even if Node is present
+#   --no-build         skip the front-end build even if Bun is present
 #   --app-dir DIR      install location (default /opt/janus)
 #   --user NAME        service account (default janus)
 #   --domain HOST      write APP_URL / CORS_ORIGINS for this host on first run
@@ -89,9 +89,9 @@ pm_install() {
 log "Installing base prerequisites"
 if [[ $PM == apt ]]; then
   apt_wait; apt-get update -qq
-  pm_install python3 python3-venv python3-dev build-essential git curl ca-certificates rsync openssl gnupg
+  pm_install python3 python3-venv python3-dev build-essential git curl ca-certificates rsync openssl gnupg unzip
 else
-  pm_install python3 python3-devel gcc gcc-c++ make git curl ca-certificates rsync openssl
+  pm_install python3 python3-devel gcc gcc-c++ make git curl ca-certificates rsync openssl unzip
 fi
 PYTHON="$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3)"
 "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
@@ -109,6 +109,19 @@ else
 fi
 UV="$(command -v uv || echo /usr/local/bin/uv)"
 [[ -x "$UV" ]] || die "uv install failed"
+
+# Bun builds the front end (bun install && bun run build). Installed system-wide
+# into /usr/local/bin so the service account can reach it. Skipped with --no-build.
+if [[ $DO_BUILD == 1 ]]; then
+  if command -v bun >/dev/null; then
+    log "bun already installed ($(bun --version))"
+  else
+    log "Installing bun into /usr/local/bin"
+    curl -fsSL https://bun.sh/install | env BUN_INSTALL=/usr/local bash
+  fi
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+  [[ -x "$BUN" ]] || die "bun install failed"
+fi
 
 # --------------------------------------------------------------------------
 # Caddy — the data plane Janus manages (unless --no-caddy)
@@ -218,11 +231,15 @@ run_uv pip install --python "$APP_DIR/.venv/bin/python" --prerelease=allow -e ".
 # --------------------------------------------------------------------------
 # front end
 # --------------------------------------------------------------------------
-if [[ $DO_BUILD == 1 ]] && command -v npm >/dev/null; then
-  log "Building the front end"
-  ( cd "$APP_DIR" && sudo -u "$APP_USER" npm ci --silent && sudo -u "$APP_USER" npm run build --silent )
+if [[ $DO_BUILD == 1 ]] && command -v bun >/dev/null; then
+  FROZEN=""; [[ -f "$APP_DIR/bun.lock" || -f "$APP_DIR/bun.lockb" ]] && FROZEN="--frozen-lockfile"
+  log "Building the front end (bun install $FROZEN && bun run build)"
+  sudo -u "$APP_USER" env HOME="$APP_DIR" \
+    sh -c 'cd "$1" && shift && exec "$@"' _ "$APP_DIR" "$BUN" install $FROZEN
+  sudo -u "$APP_USER" env HOME="$APP_DIR" \
+    sh -c 'cd "$1" && shift && exec "$@"' _ "$APP_DIR" "$BUN" run build
 elif [[ ! -f "$APP_DIR/static/build/.vite/manifest.json" ]]; then
-  warn "No front-end build present and Node is unavailable — build static/build/ elsewhere and copy it in."
+  warn "No front-end build present and Bun is unavailable — build static/build/ elsewhere and copy it in."
 fi
 
 # --------------------------------------------------------------------------

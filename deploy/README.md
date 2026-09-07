@@ -65,8 +65,9 @@ proxy pointing at `127.0.0.1:8000`.
 
 ## Front end
 
-`static/build/` is not committed. `install.sh` builds it with `npm ci && npm run
-build` if Node is on the host; otherwise build elsewhere and `rsync` it into
+`static/build/` is not committed. `install.sh` installs [Bun](https://bun.sh)
+(into `/usr/local/bin` if absent) and builds it with `bun install && bun run
+build`; pass `--no-build` to skip it and build elsewhere, then `rsync` it into
 `/opt/janus/`.
 
 ## Uninstall
