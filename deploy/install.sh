@@ -197,9 +197,17 @@ chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 # venv (uv)
 # --------------------------------------------------------------------------
 log "Building the virtualenv with uv and installing janus[$PY_EXTRAS]"
-run_uv() { sudo -u "$APP_USER" env HOME="$APP_DIR" UV_CACHE_DIR="$APP_DIR/.cache/uv" "$UV" "$@"; }
+# Run uv *from inside $APP_DIR*. sudo inherits the caller's cwd, which is the
+# invoking user's checkout (e.g. /home/ubuntu/janus) — a directory the service
+# account cannot read, so uv's config walk-up fails with
+# "Permission denied opening uv.toml". Changing into /opt/janus (owned by the
+# service account) avoids it entirely.
+run_uv() {
+  sudo -u "$APP_USER" env HOME="$APP_DIR" UV_CACHE_DIR="$APP_DIR/.cache/uv" \
+    sh -c 'cd "$1" && shift && exec "$@"' _ "$APP_DIR" "$UV" "$@"
+}
 run_uv venv --python "$PYTHON" "$APP_DIR/.venv"
-run_uv pip install --python "$APP_DIR/.venv/bin/python" --prerelease=allow -e "$APP_DIR[$PY_EXTRAS]"
+run_uv pip install --python "$APP_DIR/.venv/bin/python" --prerelease=allow -e ".[$PY_EXTRAS]"
 
 # --------------------------------------------------------------------------
 # front end
