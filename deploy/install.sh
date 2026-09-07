@@ -25,13 +25,15 @@
 #   --user NAME        service account (default janus)
 #   --domain HOST      write APP_URL / CORS_ORIGINS for this host on first run
 #   --port N           listen port for janus-web (default 8000)
+#   --host ADDR        bind address for janus-web (default 127.0.0.1)
+#   --public           bind 0.0.0.0 — reachable directly from the internet
 #
 set -euo pipefail
 
 APP=janus
 APP_DIR=/opt/janus
 APP_USER=janus
-DO_REDIS=0 DO_PG=0 DO_CADDY=1 DO_BUILD=1 DOMAIN="" PORT=""
+DO_REDIS=0 DO_PG=0 DO_CADDY=1 DO_BUILD=1 DOMAIN="" PORT="" HOST=""
 PY_EXTRAS="server,postgres,redis"
 
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
@@ -50,7 +52,9 @@ while [[ $# -gt 0 ]]; do
     --user) APP_USER="$2"; shift;;
     --domain) DOMAIN="$2"; shift;;
     --port) PORT="$2"; shift;;
-    -h|--help) sed -n '2,42p' "$0"; exit 0;;
+    --host) HOST="$2"; shift;;
+    --public) HOST=0.0.0.0;;
+    -h|--help) sed -n '2,30p' "$0"; exit 0;;
     *) die "unknown flag: $1";;
   esac
   shift
@@ -239,8 +243,9 @@ else
     sed -i "s|^APP_URL=.*|APP_URL=https://$DOMAIN|;s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN|" "$ENV_FILE"
   fi
 fi
-# --port applies on every run (it is a runtime setting, not a one-time seed).
+# --port / --host apply on every run (runtime settings, not one-time seeds).
 [[ -n "$PORT" ]] && sed -i "s|^JANUS_PORT=.*|JANUS_PORT=$PORT|" "$ENV_FILE"
+[[ -n "$HOST" ]] && sed -i "s|^JANUS_HOST=.*|JANUS_HOST=$HOST|" "$ENV_FILE"
 chmod 0640 "$ENV_FILE"; chown root:"$APP_USER" "$ENV_FILE"
 
 # --------------------------------------------------------------------------
