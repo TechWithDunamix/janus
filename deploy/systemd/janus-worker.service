@@ -1,0 +1,31 @@
+[Unit]
+Description=Janus job worker — drains the queues the scheduler and dashboard dispatch to
+# Needs QUEUE_BACKEND=redis to be useful (a shared queue). With the memory
+# backend this unit does nothing — disable it and rely on janus-scheduler.
+After=network-online.target janus-migrate.service redis-server.service
+Wants=network-online.target
+Requires=janus-migrate.service
+PartOf=janus.target
+
+[Service]
+Type=exec
+User=janus
+Group=janus
+WorkingDirectory=/opt/janus
+EnvironmentFile=/etc/janus/janus.env
+ExecStart=/opt/janus/.venv/bin/janus worker \
+    --queues ${JANUS_WORKER_QUEUES} \
+    --concurrency ${JANUS_WORKER_CONCURRENCY}
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/janus/storage
+
+[Install]
+WantedBy=multi-user.target

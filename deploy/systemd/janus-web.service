@@ -1,0 +1,32 @@
+[Unit]
+Description=Janus control plane — web tier
+After=network-online.target janus-migrate.service postgresql.service redis-server.service caddy.service
+Wants=network-online.target caddy.service
+Requires=janus-migrate.service
+PartOf=janus.target
+
+[Service]
+Type=exec
+User=janus
+Group=janus
+WorkingDirectory=/opt/janus
+EnvironmentFile=/etc/janus/janus.env
+ExecStart=/opt/janus/.venv/bin/uvicorn app.main:app \
+    --host ${JANUS_HOST} --port ${JANUS_PORT} \
+    --workers ${JANUS_WEB_WORKERS} \
+    --proxy-headers --forwarded-allow-ips '*' \
+    --timeout-graceful-shutdown 15
+KillSignal=SIGTERM
+TimeoutStopSec=25
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/janus/storage
+LimitNOFILE=32768
+
+[Install]
+WantedBy=multi-user.target

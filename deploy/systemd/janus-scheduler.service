@@ -1,0 +1,29 @@
+[Unit]
+Description=Janus periodic jobs (access-log ingestion, health, drift, alerts, retention)
+# Exactly one of these across the whole deployment — it fans the scheduled jobs
+# onto the queue (or runs them in-process with the memory backend).
+After=network-online.target janus-migrate.service redis-server.service
+Wants=network-online.target
+Requires=janus-migrate.service
+PartOf=janus.target
+
+[Service]
+Type=exec
+User=janus
+Group=janus
+WorkingDirectory=/opt/janus
+EnvironmentFile=/etc/janus/janus.env
+ExecStart=/opt/janus/.venv/bin/janus scheduler
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/janus/storage
+
+[Install]
+WantedBy=multi-user.target

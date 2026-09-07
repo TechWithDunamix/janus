@@ -1,0 +1,7 @@
+[Unit]
+Description=Janus control plane (web + scheduler + worker)
+Wants=janus-web.service janus-scheduler.service janus-worker.service
+After=janus-web.service
+
+[Install]
+WantedBy=multi-user.target
