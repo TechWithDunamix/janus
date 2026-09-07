@@ -204,3 +204,37 @@ class TestTheConsole:
     def test_no_two_commands_share_a_name(self):
         names = [c.name for c in COMMANDS]
         assert len(names) == len(set(names))
+
+
+class TestEnvFileLoading:
+    """`janus …` run by hand must see /etc/janus/janus.env, or it acts on the
+    wrong database — the account you create never reaches the web tier's login."""
+
+    def test_loads_the_named_file_without_overriding_the_real_environment(
+        self, monkeypatch, tmp_path
+    ):
+        from app.cli import _load_env_file
+
+        env_file = tmp_path / "janus.env"
+        env_file.write_text(
+            "# deployment config\n"
+            'DATABASE_URL="postgres://janus:secret@db/janus"\n'
+            "export QUEUE_BACKEND=redis\n"
+            "ALREADY_SET=from-file\n"
+        )
+        monkeypatch.setenv("JANUS_ENV_FILE", str(env_file))
+        monkeypatch.setenv("ALREADY_SET", "from-environment")
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.delenv("QUEUE_BACKEND", raising=False)
+
+        _load_env_file()
+
+        assert os.environ["DATABASE_URL"] == "postgres://janus:secret@db/janus"
+        assert os.environ["QUEUE_BACKEND"] == "redis"  # `export ` prefix stripped
+        assert os.environ["ALREADY_SET"] == "from-environment"  # real env wins
+
+    def test_a_missing_file_is_not_an_error(self, monkeypatch, tmp_path):
+        from app.cli import _load_env_file
+
+        monkeypatch.setenv("JANUS_ENV_FILE", str(tmp_path / "nope.env"))
+        _load_env_file()  # must not raise

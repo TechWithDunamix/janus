@@ -20,7 +20,7 @@ sillo release workflows use.
 | Path | What |
 |---|---|
 | `/opt/janus` | the app + its virtualenv (`.venv`) |
-| `/etc/janus/janus.env` | configuration, read by every unit; `SECRET_KEY` generated on first run |
+| `/etc/janus/janus.env` | configuration, read by every unit — and auto-loaded by the `janus` CLI, so `sudo -u janus janus …` by hand hits the same database as the service. Override with `JANUS_ENV_FILE=`. |
 | `janus` (system user) | runs every service; no login shell |
 | Caddy | installed + enabled; admin API on `127.0.0.1:2019` (what Janus drives) |
 

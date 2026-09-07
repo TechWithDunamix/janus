@@ -25,10 +25,10 @@ def connection() -> Any:
     """The shared queue connection, created on first use."""
     global _connection
     if _connection is None:
-        from sillo.work.queue import SyncConnection
+        from sillo.work.queue import RedisConnection, SyncConnection
 
         url = queue_url()
-        _connection = SyncConnection(url) if url else SyncConnection()
+        _connection = RedisConnection(url) if url else SyncConnection()
     return _connection
 
 

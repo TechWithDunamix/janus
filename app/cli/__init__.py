@@ -13,11 +13,52 @@ The command set is grouped by noun, and the grouping is in the names
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
+from pathlib import Path
 
-from sillo.console import Command, Console
 
-from app.cli import analytics, auth, config, gateway, local, modules, security, team
+def _load_env_file() -> None:
+    """Populate ``os.environ`` from a deployment env file before config is read.
+
+    Only the systemd units get ``EnvironmentFile=``. A hand-run ``janus migrate``
+    or ``janus admin create`` would otherwise fall back to the built-in defaults
+    (SQLite, memory queue) and quietly act on a *different* database than the
+    running service — the account you create never shows up at the login the
+    web tier serves. Load ``$JANUS_ENV_FILE`` if set, else ``/etc/janus/janus.env``,
+    else ``./.env``. Real environment variables always win (``setdefault``); the
+    first file to define a key wins over later ones.
+    """
+    candidates: list[Path] = []
+    explicit = os.environ.get("JANUS_ENV_FILE")
+    if explicit:
+        candidates.append(Path(explicit))
+    candidates += [Path("/etc/janus/janus.env"), Path.cwd() / ".env"]
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            lines = path.read_text().splitlines()
+        except OSError:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key:
+                os.environ.setdefault(key, value)
+
+
+_load_env_file()
+
+from sillo.console import Command, Console  # noqa: E402
+
+from app.cli import analytics, auth, config, gateway, local, modules, security, team  # noqa: E402
 
 __all__ = ["COMMANDS", "JanusConsole", "build_console", "main"]
 

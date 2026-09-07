@@ -16,8 +16,10 @@ dependencies = [
     "sillo-inertia==0.1.0.dev1",
     # The only client Janus needs. Caddy's admin API is plain HTTP, so there is
     # no vendor SDK in the dependency list and no release cadence but Caddy's
-    # own that can break this build.
-    "httpx>=0.28.1",
+    # own that can break this build. Capped below 1.0 — the 1.0 dev line drops
+    # httpx.ASGITransport, which the test client needs, and the installer's
+    # --prerelease=allow would otherwise pull it.
+    "httpx>=0.28.1,<1",
     "aiosqlite>=0.19.0",
 ]
 
