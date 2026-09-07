@@ -1,0 +1,149 @@
+# Janus, its data plane, and the two pieces of infrastructure it needs.
+#
+# Deliberately small. No Kubernetes, no Kafka, no Elasticsearch, no service
+# mesh — Janus is a control plane and an analytics store, and neither needs a
+# distributed system underneath it. Postgres holds the desired state and the
+# rollups; Redis carries the job queue; Caddy is the gateway.
+#
+# The one thing worth understanding here is the **shared log volume**. Caddy
+# writes its JSON access log to `caddy-logs`, and the Janus collector reads it
+# from the same volume. That is the whole analytics pipeline: no broker, no
+# agent, no sidecar. It works because they are on one host; across hosts, mount
+# the same network volume or run a collector beside each gateway.
+
+name: janus
+
+services:
+  # -- data plane -----------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # Started with an *empty* configuration and an open admin API. Janus writes
+    # the server it owns on first deploy; nothing is configured here, because a
+    # configuration in this file would be a second source of truth that the
+    # control plane would then report as drift.
+    command: >
+      caddy run --config /etc/caddy/bootstrap.json
+    ports:
+      - "8080:8080"   # gateway traffic
+      - "8443:8443"
+    expose:
+      - "2019"        # admin API, reachable only on the compose network
+    volumes:
+      - ./docker/caddy-bootstrap.json:/etc/caddy/bootstrap.json:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - caddy-logs:/var/log/caddy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # -- infrastructure -------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: janus
+      POSTGRES_PASSWORD: janus
+      POSTGRES_DB: janus
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U janus"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # -- control plane --------------------------------------------------------
+  web:
+    build: .
+    restart: unless-stopped
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    environment: &janus-env
+      APP_ENV: docker
+      APP_DEBUG: "false"
+      APP_URL: http://localhost:8000
+      # Development value, and it is one on purpose: this file is for trying
+      # Janus out. `check_production` refuses to start with the *library*
+      # default when APP_ENV=production, and a real deployment sets its own.
+      SECRET_KEY: docker-development-secret-not-for-production
+      # http inside compose, so a Secure cookie would be accepted by the
+      # browser and then never sent back.
+      COOKIE_SECURE: "false"
+
+      DATABASE_URL: postgres://janus:janus@postgres:5432/janus
+      QUEUE_BACKEND: redis
+      REDIS_URL: redis://redis:6379/0
+
+      CADDY_ADMIN_URL: http://caddy:2019
+      CADDY_SERVER_NAME: janus
+      CADDY_LISTEN: ":8080"
+      CADDY_ACCESS_LOG: /var/log/caddy/janus-access.log
+      # A real Caddy is running beside this container, so nothing is simulated.
+      CADDY_SIMULATE: "false"
+
+      VITE_DEV: "false"
+    volumes:
+      - caddy-logs:/var/log/caddy:ro
+      - janus-storage:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      caddy: {condition: service_healthy}
+
+  # The collector and the periodic jobs. A separate process because they
+  # compete with request handling for the event loop otherwise, and because
+  # exactly one of them should run however many web replicas there are.
+  scheduler:
+    build: .
+    restart: unless-stopped
+    command: ["scheduler"]
+    environment:
+      <<: *janus-env
+      # The web container owns the schema. Creating tables concurrently races
+      # on the implicit row type behind CREATE TABLE IF NOT EXISTS, and the
+      # error names nothing about the race that caused it.
+      DB_GENERATE_SCHEMAS: "false"
+    volumes:
+      - caddy-logs:/var/log/caddy:ro
+      - janus-storage:/app/storage
+    depends_on:
+      web: {condition: service_started}
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["worker", "--queues", "collector,health,gateway,analytics"]
+    environment:
+      <<: *janus-env
+      DB_GENERATE_SCHEMAS: "false"
+    volumes:
+      - caddy-logs:/var/log/caddy:ro
+      - janus-storage:/app/storage
+    depends_on:
+      web: {condition: service_started}
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+  # Written by Caddy, read by the collector. The pipeline in one volume.
+  caddy-logs:
+  janus-storage:

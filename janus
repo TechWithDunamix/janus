@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+"""The `janus` command.
+
+Kept as a script at the project root so `./janus` works from a checkout without
+an install step, and so `pip install janus` can point a console entry point at
+`app.cli:main` — the same function either way.
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from app.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())

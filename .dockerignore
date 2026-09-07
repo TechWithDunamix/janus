@@ -1,0 +1,17 @@
+.git
+.venv
+node_modules
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+static/build
+storage
+tests
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+docker-compose*.yml

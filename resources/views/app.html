@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#12161f" media="(prefers-color-scheme: dark)" />
+
+    <!--
+      The theme is applied before the first paint, not on mount. Deferring it
+      to React gives a dark-mode operator one frame of white page on every full
+      load, which is the most visible bug a dashboard can have.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('janus-theme');
+          if (stored === 'dark' || stored === 'light') {
+            document.documentElement.dataset.theme = stored;
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <!--
+      The adapter substitutes exactly these three names, and nothing else in
+      this file is dynamic:
+
+        inertia_head — the Vite tags (dev server, or the hashed build assets)
+        inertia      — the page object, as a JSON script tag
+        root_id      — the id the client mounts on
+
+      A placeholder the adapter does not know is blanked rather than left in
+      place — so a template written against invented names renders a valid,
+      completely empty page with no error anywhere. Which is exactly what this
+      file did before it was corrected.
+    -->
+    {{ inertia_head }}
+  </head>
+  <body class="h-full">
+    <div id="{{ root_id }}" class="min-h-full"></div>
+    {{ inertia }}
+  </body>
+</html>
