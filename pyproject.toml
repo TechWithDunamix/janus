@@ -12,8 +12,8 @@ dependencies = [
     # Sillo does the framework-level work: routing, middleware, sessions, auth,
     # permissions, the ORM, migrations, validation, the console, the queue and
     # the scheduler. Janus adds a domain on top of it and no framework of its own.
-    "sillo-framework[cache,hashing-bcrypt,record]==0.3.2.dev1",
-    "sillo-inertia==0.1.0.dev1",
+    "sillo-framework[cache,hashing-bcrypt,record]==1.0.1",
+    "sillo-inertia==1.0.0",
     # The only client Janus needs. Caddy's admin API is plain HTTP, so there is
     # no vendor SDK in the dependency list and no release cadence but Caddy's
     # own that can break this build. Capped below 1.0 — the 1.0 dev line drops
