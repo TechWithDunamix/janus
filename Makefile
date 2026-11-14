@@ -7,7 +7,7 @@
 # always read what a target does and run it by hand when you need to vary it.
 
 .DEFAULT_GOAL := help
-.PHONY: help check-venv env install build setup deploy migrate seed admin \
+.PHONY: help check-venv env install requirements build setup deploy migrate seed admin \
         config-show config-apply scheduler worker cli dev serve caddy-setup \
         caddy-run test typecheck lint format check clean
 
@@ -15,8 +15,8 @@
 # inside them — prefer uv when it is on PATH, fall back to python -m pip.
 PY  := python
 PIP := $(shell command -v uv >/dev/null 2>&1 && echo "uv pip install --python python" || echo "python -m pip install")
-JANUS   := ./janus
-APP     := app.main:app
+JANUS   := janus
+APP     := main:app
 HOST    ?= 127.0.0.1
 PORT    ?= 8000
 WORKERS ?= 1
@@ -48,10 +48,15 @@ env: check-venv  ## Create .env: fresh SECRET_KEY, local service hosts
 	@$(PY) -c "import pathlib,re,secrets; p=pathlib.Path('.env'); t=p.read_text(); t=re.sub(r'^SECRET_KEY=$$|^SECRET_KEY=change-me.*$$', 'SECRET_KEY='+secrets.token_hex(32), t, flags=re.M); t=t.replace('@postgres:5432','@127.0.0.1:5432').replace('redis:6379','127.0.0.1:6379').replace('http://caddy:2019','http://127.0.0.1:2019'); t=re.sub(r'^CADDY_ACCESS_LOG=.*$$', 'CADDY_ACCESS_LOG=storage/access.log', t, flags=re.M); p.write_text(t)" \
 	  && echo "  .env ready (SECRET_KEY filled in; docker hostnames pointed at 127.0.0.1 — edit .env if yours live elsewhere)"
 
-install: check-venv  ## Install Python packages and front-end dependencies
-	$(PIP) -e '.[server,postgres,redis,dev]'
+# requirements-dev.txt pins every dependency (runtime + test/lint tools) and
+# installs this project in editable mode, so src/ is importable everywhere.
+install: check-venv  ## Install pinned Python packages and front-end dependencies
+	$(PIP) -r requirements-dev.txt
 	@test -n "$(NODE)" || { echo "  need bun or npm on PATH for the front end"; exit 1; }
 	$(NODE) install
+
+requirements:  ## Regenerate requirements*.txt from pyproject.toml (needs uv)
+	scripts/update-requirements.sh
 
 build:  ## Build the front end into static/build
 	@test -n "$(NODE)" || { echo "  need bun or npm on PATH for the front end"; exit 1; }

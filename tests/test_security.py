@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.services import apikeys, security
 from database.models import ApiKey, AuditEvent, Client, IpRule, RateLimit, normalise_cidr
+from modules.services import apikeys, security
 from tests.helpers import api_token, auth_headers, make_gateway, make_user
 
 

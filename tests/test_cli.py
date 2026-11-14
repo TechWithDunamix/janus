@@ -19,9 +19,9 @@ from sillo.console.arguments import ParsedInput
 from sillo.console.output import Output
 from sillo.console.prompt import Prompt
 
-from app.cli import COMMANDS, build_console
-from app.cli.base import ApiCommand, LocalCommand
-from app.cli.client import ApiClient, CliAuthRequired, clear_token, load_token, save_token
+from cli import COMMANDS, build_console
+from cli.base import ApiCommand, LocalCommand
+from cli.client import ApiClient, CliAuthRequired, clear_token, load_token, save_token
 from tests.helpers import make_user
 
 
@@ -90,7 +90,7 @@ class TestBootstrapIsNotAPermanentBackDoor:
     async def test_admin_create_refuses_once_an_account_exists(self, capsys):
         """Without this, the CLI is a permanent way around authorization for
         anyone with shell access."""
-        from app.cli.team import AdminCreate
+        from cli.team import AdminCreate
 
         await make_user("existing@test.local", role="Owner")
 
@@ -125,7 +125,7 @@ class TestDestructiveCommandsConfirm:
     def test_a_non_interactive_shell_without_yes_refuses(self, monkeypatch):
         """A pipeline that meant to delete a route can say so; one that did not
         should not discover the difference in production."""
-        from app.cli.base import _Base
+        from cli.base import _Base
 
         monkeypatch.setattr("sillo.console.terminal.is_interactive", lambda: False)
 
@@ -213,7 +213,7 @@ class TestEnvFileLoading:
     def test_loads_the_named_file_without_overriding_the_real_environment(
         self, monkeypatch, tmp_path
     ):
-        from app.cli import _load_env_file
+        from cli import _load_env_file
 
         env_file = tmp_path / "janus.env"
         env_file.write_text(
@@ -234,7 +234,7 @@ class TestEnvFileLoading:
         assert os.environ["ALREADY_SET"] == "from-environment"  # real env wins
 
     def test_a_missing_file_is_not_an_error(self, monkeypatch, tmp_path):
-        from app.cli import _load_env_file
+        from cli import _load_env_file
 
         monkeypatch.setenv("JANUS_ENV_FILE", str(tmp_path / "nope.env"))
         _load_env_file()  # must not raise

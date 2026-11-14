@@ -36,8 +36,8 @@ os.environ.setdefault("DB_GENERATE_SCHEMAS", "false")
 
 from tortoise import Tortoise  # noqa: E402
 
-from app.authz import ensure_roles  # noqa: E402
 from database.config import MODEL_MODULES  # noqa: E402
+from modules.auth.permissions import ensure_roles  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -54,7 +54,7 @@ async def database():
 @pytest.fixture
 def app():
     """The application, assembled by the same factory the server uses."""
-    from app.bootstrap import create_app
+    from core.bootstrap import create_app
 
     return create_app()
 

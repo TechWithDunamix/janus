@@ -12,7 +12,8 @@ import shutil
 
 import pytest
 
-from app.caddy.modules import (
+from database.models import GatewayRoute, RateLimit
+from modules.caddy.modules import (
     CATALOG,
     BuildInfo,
     build_command,
@@ -22,9 +23,8 @@ from app.caddy.modules import (
     script_command,
     unsupported_modules,
 )
-from app.services import configuration as config_service
-from app.services.modules import build_for, feature_gaps, record_declared
-from database.models import GatewayRoute, RateLimit
+from modules.services import configuration as config_service
+from modules.services.modules import build_for, feature_gaps, record_declared
 from tests.helpers import (
     api_token,
     auth_headers,
@@ -221,7 +221,7 @@ class TestItChangesWhatJanusEmits:
     async def test_without_the_module_the_handler_is_not_emitted(self, monkeypatch):
         # Force a build with no non-core modules, so the test does not depend
         # on whatever caddy is installed on the machine running it.
-        from app.services import modules as modules_service
+        from modules.services import modules as modules_service
 
         async def _core_only(_gateway):
             return BuildInfo(source="unknown")
@@ -246,7 +246,7 @@ class TestItChangesWhatJanusEmits:
     async def test_a_declared_build_is_not_validated_by_the_local_binary(self):
         """The operator has said the remote build differs from this host's, so
         this binary would reject handlers the real gateway supports."""
-        from app.caddy.manager import manager_for
+        from modules.caddy.manager import manager_for
 
         gateway = await self.estate()
         await record_declared(gateway, ["http.handlers.rate_limit"])

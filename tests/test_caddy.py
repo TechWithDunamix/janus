@@ -18,10 +18,10 @@ import shutil
 
 import pytest
 
-from app.caddy import CaddyApplyError, CaddyManager, SimulatedTransport
-from app.caddy.config_builder import CAPABILITY_RATE_LIMIT, build_server
-from app.services import configuration as config_service
 from database.models import ConfigVersion, Deployment, GatewayRoute, IpRule, RateLimit
+from modules.caddy import CaddyApplyError, CaddyManager, SimulatedTransport
+from modules.caddy.config_builder import CAPABILITY_RATE_LIMIT, build_server
+from modules.services import configuration as config_service
 from tests.helpers import make_domain, make_gateway, make_upstream, make_user
 
 has_caddy = pytest.mark.skipif(shutil.which("caddy") is None, reason="no caddy binary")
@@ -155,8 +155,8 @@ class TestGeneration:
     async def test_a_rate_limit_warns_when_the_build_lacks_the_module(self, monkeypatch):
         """Janus must never emit a handler it knows would be rejected, and must
         never claim a limit is enforced when it is not."""
-        from app.caddy.modules import BuildInfo
-        from app.services import modules as modules_service
+        from modules.caddy.modules import BuildInfo
+        from modules.services import modules as modules_service
 
         async def _core_only(_gateway):
             return BuildInfo(source="unknown")
@@ -296,7 +296,7 @@ class TestThePipeline:
             async def post(self, path, payload):
                 raise CaddyApplyError("simulated refusal", status=500)
 
-        import app.caddy.manager as manager_module
+        import modules.caddy.manager as manager_module
 
         original = manager_module.manager_for
         manager_module.manager_for = lambda gw: CaddyManager(transport=Refusing(), simulate=True)

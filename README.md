@@ -50,16 +50,29 @@ its own history a lie.
 
 ## Quick start
 
-Requires Python 3.11+, Node 22+, and `caddy` on your PATH.
+Requires Python 3.11+, Node 22+ (or Bun) to build the dashboard, and `caddy` on
+your PATH.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,server]"
-npm install
+git clone https://github.com/TechWithDunamix/janus.git && cd janus
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt   # pinned deps + this project (editable)
+npm install                           # or: bun install
+cp .env.example .env                  # local settings; real env vars always win
 
-./janus migrate            # schema + permission catalogue
-./janus admin create       # the first account; refuses once one exists
+janus migrate              # schema + permission catalogue
+janus admin create         # the first account; refuses once one exists
 ```
+
+**Requirements files.** `requirements.txt` pins every runtime dependency
+(Sillo, sillo-inertia, Tortoise, httpx, uvicorn, asyncpg, redis, …) and ends
+with `-e .`, which installs Janus itself in editable mode: that puts `src/` on
+the Python path so `uvicorn main:app`, `python -m cli` and the `janus` command
+work from any directory. Run `pip install -r …` from the project root.
+`requirements-dev.txt` adds pytest and ruff. Both are generated from
+`pyproject.toml` by `scripts/update-requirements.sh` (`make requirements`,
+needs [uv](https://docs.astral.sh/uv/)); with uv, `uv venv && uv pip install
+-r requirements-dev.txt` is the fast path.
 
 The same pipeline — and every day-two task — is in the [`Makefile`](Makefile):
 `make help` lists them. With a virtual environment active, `make deploy`
@@ -76,13 +89,13 @@ caddy run --config docker/caddy-bootstrap.json
 Then Janus:
 
 ```bash
-npm run dev                # Vite, on :5173
-./janus serve              # Janus, on :8000
+npm run dev                # Vite, on :5173 (or `npm run build` and VITE_DEV=false)
+janus serve --reload       # Janus, on :8000
 ```
 
-Define a gateway, upstreams and routes, then `./janus config apply`.
+Define a gateway, upstreams and routes, then `janus config apply`.
 
-**Or try it with demo data:** `./janus seed` creates a gateway, seven upstreams, nine
+**Or try it with demo data:** `janus seed` creates a gateway, seven upstreams, nine
 routes, security rules, 48 hours of traffic, and one account per role.
 
 > Seeded *traffic* is marked `simulated` on every row and labelled in the UI. The
@@ -311,7 +324,7 @@ virtualenv, installing it into `/usr/local/bin` if absent.
 
 | Path | What |
 |---|---|
-| `/opt/janus` | the app + its virtualenv (`.venv`, deps from `.[server,postgres,redis]`) |
+| `/opt/janus` | the app + its virtualenv (`.venv`, the project installed with its `server`, `postgres` and `redis` extras) |
 | `/etc/janus/janus.env` | configuration, read by every unit — and auto-loaded by the `janus` CLI, so `sudo -u janus janus …` hits the same database as the service |
 | `janus` (system user) | runs every service; no login shell |
 | Caddy | installed + enabled; admin API on `127.0.0.1:2019` |
@@ -322,7 +335,7 @@ virtualenv, installing it into `/usr/local/bin` if absent.
 | Unit | Role |
 |---|---|
 | `janus-migrate.service` | `oneshot` — `janus migrate`; the only process that creates schema |
-| `janus-web.service` | dashboard + JSON API: `uvicorn app.main:app --workers ${JANUS_WEB_WORKERS}` |
+| `janus-web.service` | dashboard + JSON API: `uvicorn main:app --workers ${JANUS_WEB_WORKERS}` |
 | `janus-scheduler.service` | access-log ingestion, upstream health, drift, alerts — **exactly one** |
 | `janus-worker.service` | drains job queues; enabled only with `QUEUE_BACKEND=redis` |
 | `janus.target` | convenience: `systemctl restart janus.target` |
@@ -367,6 +380,130 @@ Unit details, queue-backend choices and uninstall steps:
 [`deploy/README.md`](deploy/README.md). For local development copy the root
 [`.env.example`](.env.example) to `.env` instead.
 
+### On a server, step by step (no Docker, no installer)
+
+The same result as the installer, by hand, on Debian/Ubuntu. The unit files in
+`deploy/systemd/` expect the code in `/opt/janus`, a `janus` system user and
+settings in `/etc/janus/janus.env`; adjust them if you choose other paths.
+
+**1. Packages**
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-dev build-essential git \
+                    postgresql redis-server caddy
+curl -fsSL https://bun.sh/install | sudo env BUN_INSTALL=/usr/local bash   # front-end build
+python3 --version          # 3.11 or newer
+```
+
+Rate limiting needs Caddy built with the `caddy-ratelimit` plugin;
+`scripts/setup-caddy.sh` rebuilds the local binary (see *Plugins* above).
+
+**2. User, code and dependencies**
+
+```bash
+sudo useradd --system --home-dir /opt/janus --shell /usr/sbin/nologin janus
+sudo git clone https://github.com/TechWithDunamix/janus.git /opt/janus
+sudo mkdir -p /opt/janus/storage && sudo chown -R janus:janus /opt/janus
+cd /opt/janus
+sudo -u janus python3 -m venv .venv
+sudo -u janus .venv/bin/pip install --upgrade pip
+sudo -u janus .venv/bin/pip install -r requirements.txt
+sudo -u janus bun install --frozen-lockfile && sudo -u janus bun run --bun build
+#   or, with Node 22+: sudo -u janus npm ci && sudo -u janus npm run build
+```
+
+**3. PostgreSQL**
+
+```bash
+DB_PASS=$(openssl rand -hex 16)
+sudo -u postgres psql -c "CREATE ROLE janus LOGIN PASSWORD '$DB_PASS';"
+sudo -u postgres createdb -O janus janus
+```
+
+**4. Settings** — start from the template and set the values in the table
+below (`SECRET_KEY` from `openssl rand -hex 32`, `DATABASE_URL` with
+`$DB_PASS`, your domain in `APP_URL`/`CORS_ORIGINS`):
+
+```bash
+sudo mkdir -p /etc/janus
+sudo cp /opt/janus/deploy/janus.env.example /etc/janus/janus.env
+sudo chown root:janus /etc/janus/janus.env && sudo chmod 0640 /etc/janus/janus.env
+sudoedit /etc/janus/janus.env
+```
+
+systemd keeps everything after `=`, so keep comments on their own lines.
+
+**5. Caddy** — the data plane. Janus manages Caddy only through its admin API
+(`127.0.0.1:2019`, the packaged service's default) and writes nothing else. Caddy
+writes each gateway's access log into `/opt/janus/storage/`, which Janus then
+reads. Let the `caddy` user write there, and make new files inherit the `janus`
+group (setgid); Janus asks Caddy to create them group-readable (`0640`):
+
+```bash
+sudo usermod -aG janus caddy
+sudo chown janus:janus /opt/janus/storage && sudo chmod 2770 /opt/janus/storage
+sudo systemctl enable --now caddy && sudo systemctl restart caddy
+curl -s http://127.0.0.1:2019/config/ >/dev/null && echo "caddy admin API up"
+```
+
+**6. Schema, first account, services**
+
+```bash
+sudo -u janus /opt/janus/.venv/bin/janus migrate
+sudo -u janus /opt/janus/.venv/bin/janus admin create you@example.com
+sudo cp /opt/janus/deploy/systemd/janus-*.service /opt/janus/deploy/systemd/janus.target \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now janus.target
+curl -s http://127.0.0.1:8000/health
+journalctl -u janus-web -f          # also: -u janus-scheduler, -u janus-worker
+```
+
+The CLI reads `/etc/janus/janus.env` itself, so it acts on the same database as
+the services. `janus-worker` only has work with `QUEUE_BACKEND=redis`; run
+exactly one `janus-scheduler`.
+
+**7. TLS for the dashboard** — Janus listens on `127.0.0.1:8000`. Put a site in
+front of it, for example in Caddy (a separate site from the gateways Janus
+manages):
+
+```
+janus.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+or nginx:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name janus.example.com;
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**8. Upgrades and backups**
+
+```bash
+cd /opt/janus && sudo -u janus git pull
+sudo -u janus .venv/bin/pip install -r requirements.txt
+sudo -u janus bun install --frozen-lockfile && sudo -u janus bun run --bun build
+sudo systemctl restart janus.target            # janus-migrate runs first
+
+sudo -u postgres pg_dump -Fc janus > janus-$(date +%F).dump   # backup
+```
+
+Back up `/etc/janus/janus.env` with the database. Every deployed Caddy
+configuration is stored as a version in the database, so a restore plus
+`janus config apply` rebuilds the gateways.
+
 ### Docker
 
 ```bash
@@ -397,28 +534,42 @@ at startup is not where anyone will see it.
 
 Settings are documented in [`.env.example`](.env.example) (local development),
 [`deploy/janus.env.example`](deploy/janus.env.example) (server) and
-[`app/config.py`](app/config.py).
+[`src/core/config.py`](src/core/config.py).
 
 ## Layout
 
+Everything that runs lives in `src/`: the Python packages and the React front
+end side by side; feature areas are under `src/modules/`. Every module, class
+and function carries a docstring.
+
 | Path | Contains |
 |---|---|
-| [`app/caddy/`](app/caddy/) | The only code that talks to Caddy. `manager.py` the interface, `config_builder.py` a pure desired-state → JSON function, `transport.py` the HTTP client and simulator |
-| [`app/services/`](app/services/) | Configuration pipeline, analytics queries, security, API keys, alerts, health |
-| [`app/collector/`](app/collector/) | Access-log and Prometheus ingestion |
-| [`app/authz.py`](app/authz.py) | Permission catalogue, default roles, the one `require()` |
-| [`app/docs/`](app/docs/) | The 19 in-dashboard documentation pages |
-| [`app/cli/`](app/cli/) | The `janus` console, on `sillo.console` |
-| [`database/models/`](database/models/) | Identity, gateway, security, analytics, configuration |
-| [`routes/web/`](routes/web/) | Inertia pages and the route guard |
-| [`routes/api/`](routes/api/) | The JSON API — what the CLI calls |
-| [`views/`](views/) | React screens, layouts, UI kit |
-| [`js/app.css`](js/app.css) | Design tokens. The whole visual identity |
+| [`src/main.py`](src/main.py) | ASGI entry point: `uvicorn main:app` |
+| [`src/app.html`](src/app.html) | The Inertia root HTML view |
+| [`src/js/`](src/js/) | Front-end entry, hooks, types, and `app.css` — the design tokens, the whole visual identity |
+| [`src/views/`](src/views/) | React screens, layouts and the UI kit |
+| [`src/public/`](src/public/) | Static files served at `/static` (favicon) |
+| [`src/core/`](src/core/) | Settings, paths, app assembly, Inertia, jobs and the queue |
+| [`src/database/`](src/database/) | Database wiring, models (identity, gateway, security, analytics, configuration), demo seeds |
+| [`src/routes/web/`](src/routes/web/) | Inertia pages, form actions and the route guard |
+| [`src/routes/api/`](src/routes/api/) | The JSON API — what the CLI calls |
+| [`src/cli/`](src/cli/) | The `janus` console, on `sillo.console` |
+| [`src/modules/caddy/`](src/modules/caddy/) | The only code that talks to Caddy. `manager.py` the interface, `config_builder.py` a pure desired-state → JSON function, `transport.py` the HTTP client and simulator, `modules.py` plugin detection |
+| [`src/modules/services/`](src/modules/services/) | Configuration pipeline, analytics queries, security, API keys, alerts, health |
+| [`src/modules/collector/`](src/modules/collector/) | Access-log and Prometheus ingestion |
+| [`src/modules/auth/`](src/modules/auth/) | Permission catalogue, default roles, the one `require()` |
+| [`src/modules/gateways/`](src/modules/gateways/) | Which gateway a request is acting on |
+| [`src/modules/docs/`](src/modules/docs/) | The in-dashboard documentation pages |
+| [`tests/`](tests/) | The test suite |
+| [`deploy/`](deploy/) | Installer, systemd units, production env template |
+| [`docker/`](docker/) | Caddy bootstrap config for Compose and manual setups |
+| [`scripts/`](scripts/) | `setup-caddy.sh` (rebuild Caddy with plugins), `update-requirements.sh` |
+| `static/build/`, `storage/` | Generated: compiled front end; SQLite, access logs, collector offsets |
 
 ## Tests
 
 ```bash
-pytest            # 244 tests
+pytest            # 252 tests
 npm run typecheck
 ruff check .
 ```

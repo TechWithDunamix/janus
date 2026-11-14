@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.authz import (
+from modules.auth.permissions import (
     DEFAULT_ROLES,
     PERMISSION_NAMES,
     PermissionDenied,

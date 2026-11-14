@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from app.docs import DOCS, SECTIONS, doc_by_slug, navigation, neighbours, search
+from modules.docs import DOCS, SECTIONS, doc_by_slug, navigation, neighbours, search
 from tests.helpers import make_user, sign_in
 
 #: Every block type `views/ui/docs.tsx` has a branch for. A page using anything

@@ -61,7 +61,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 SRC="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-[[ -f "$SRC/pyproject.toml" && -d "$SRC/app" ]] || die "run this from the janus checkout ($SRC looks wrong)"
+[[ -f "$SRC/pyproject.toml" && -f "$SRC/src/main.py" ]] || die "run this from the janus checkout ($SRC looks wrong)"
 
 if   command -v apt-get >/dev/null; then PM=apt
 elif command -v dnf     >/dev/null; then PM=dnf

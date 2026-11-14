@@ -16,8 +16,8 @@ COPY package.json package-lock.json* ./
 RUN npm ci --no-audit --no-fund
 
 COPY tsconfig.json vite.config.ts ./
-COPY js ./js
-COPY views ./views
+COPY src/js ./src/js
+COPY src/views ./src/views
 RUN npm run build
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,8 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    JANUS_ROOT=/app
 
 # `caddy` is here for `caddy validate` and `caddy list-modules`, both of which
 # Janus shells out to. It is not run as a server in this image.
@@ -41,14 +42,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY database ./database
-COPY routes ./routes
-COPY resources ./resources
-COPY public ./public
-COPY janus ./janus
-RUN pip install --no-cache-dir ".[postgres,redis,server]" && chmod +x /app/janus
+# requirements.txt pins every runtime dependency and ends with `-e .`, so the
+# source (Python packages, src/app.html, src/public) must be in place first.
+COPY pyproject.toml README.md requirements.txt ./
+COPY src ./src
+RUN pip install -r requirements.txt
 
 COPY --from=assets /build/static/build ./static/build
 
@@ -66,5 +64,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status==200 else 1)"
 
-ENTRYPOINT ["/app/janus"]
+ENTRYPOINT ["janus"]
 CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]

@@ -30,13 +30,22 @@ server = ["uvicorn[standard]>=0.30.0"]
 dev = ["pytest>=8.3.5", "pytest-asyncio>=0.25.3", "ruff>=0.6.0"]
 
 [project.scripts]
-janus = "app.cli:main"
+janus = "cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "database", "routes"]
+# Every top-level package lives directly in src/ (no wrapper package). The
+# editable install (`pip install -e .`, which requirements.txt performs) puts
+# src/ on sys.path, so `import core`, `uvicorn main:app` and the `janus`
+# command work from any directory.
+sources = ["src"]
+only-include = ["src/main.py", "src/core", "src/database", "src/routes", "src/cli", "src/modules"]
+
+[tool.sillo]
+app = "main:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 asyncio_mode = "auto"
 addopts = "-q"
 filterwarnings = ["ignore::DeprecationWarning"]
@@ -44,7 +53,8 @@ filterwarnings = ["ignore::DeprecationWarning"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["database/migrations"]
+src = ["src", "tests"]
+extend-exclude = ["src/database/migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

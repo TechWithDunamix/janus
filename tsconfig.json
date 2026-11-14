@@ -21,7 +21,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     },
     "types": [
@@ -30,8 +30,8 @@
     ]
   },
   "include": [
-    "js/**/*",
-    "views/**/*",
+    "src/js/**/*",
+    "src/views/**/*",
     "vite.config.ts"
   ]
 }

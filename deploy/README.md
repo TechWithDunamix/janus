@@ -29,7 +29,7 @@ sillo release workflows use.
 | Unit | Role |
 |---|---|
 | `janus-migrate.service` | `oneshot` — `janus migrate`. Everything else requires it. |
-| `janus-web.service` | the dashboard + JSON API: `uvicorn app.main:app --workers ${JANUS_WEB_WORKERS}`. |
+| `janus-web.service` | the dashboard + JSON API: `uvicorn main:app --workers ${JANUS_WEB_WORKERS}`. |
 | `janus-scheduler.service` | the periodic jobs — access-log ingestion, upstream health, drift detection, alerts, retention. **Exactly one** across the deployment. |
 | `janus-worker.service` | drains the queues the scheduler and dashboard dispatch to. Only useful with `QUEUE_BACKEND=redis`; the installer leaves it disabled otherwise. |
 | `janus.target` | convenience: `systemctl restart janus.target`. |

@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-from app.collector import ingest_lines, parse_line
-from app.services import analytics
 from database.models import (
     LATENCY_BUCKETS_MS,
     Client,
@@ -15,6 +13,8 @@ from database.models import (
     RouteRollup,
     bucket_for,
 )
+from modules.collector import ingest_lines, parse_line
+from modules.services import analytics
 from tests.helpers import make_domain, make_gateway, make_upstream
 
 
@@ -421,7 +421,7 @@ class TestApiKeyAttribution:
     async def test_a_request_carrying_a_key_is_attributed_to_it(self):
         """The prefix the collector extracts and the prefix the issuer stores
         have to be the same length, or every lookup misses in silence."""
-        from app.services import apikeys
+        from modules.services import apikeys
         from tests.helpers import make_user
 
         gateway = await make_gateway()

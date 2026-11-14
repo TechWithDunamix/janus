@@ -133,7 +133,9 @@ restart_caddy() {
     info "  cmd: $cmd"
     run "kill '$pid'"
     sleep 1
-    run "cd '$cwd' && nohup $cmd > '$cwd/caddy.restart.log' 2>&1 &"
+    # The restarted Caddy keeps its original working directory (relative paths in
+    # its config resolve against it); only its output goes to Janus's storage/.
+    run "mkdir -p '$REPO_ROOT/storage' && cd '$cwd' && nohup $cmd > '$REPO_ROOT/storage/caddy.restart.log' 2>&1 &"
     sleep 1
   fi
 
@@ -142,7 +144,7 @@ restart_caddy() {
     if curl -sf -o /dev/null "$admin/config/"; then ok "admin API up at $admin"; return 0; fi
     sleep 0.5
   done
-  info "admin API at $admin did not answer within 10s — check the restart log"
+  info "admin API at $admin did not answer within 10s — check storage/caddy.restart.log"
 }
 
 # --------------------------------------------------------------------------
