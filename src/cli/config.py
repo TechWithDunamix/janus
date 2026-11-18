@@ -11,10 +11,50 @@ from cli.client import ApiClient
 
 __all__ = [
     "ConfigApply", "ConfigDiff", "ConfigHistory", "ConfigRollback", "ConfigShow",
-    "ConfigValidate",
+    "ConfigValidate", "ConfigFilePlan", "ConfigFileApply",
 ]
 
 GATEWAY_OPTION = Option("gateway", help="Gateway slug or id.")
+
+
+class ConfigFilePlan(ApiCommand):
+    """Preview missing Janus resources in a YAML setup file."""
+
+    name = "config file plan"
+    help = "Validate YAML and preview gateways, upstreams, routes, limits and keys."
+    arguments = [Argument("file", help="Path to a Janus YAML setup file.")]
+
+    def run(self, api: ApiClient) -> int:
+        from cli.config_file import load_config, plan
+
+        actions, _ = plan(api, load_config(self.argument("file")))
+        if self.wants_json:
+            self.emit({"actions": actions})
+        else:
+            for item in actions:
+                self.line(f"{item['action']:6} {item['kind']:10} {item['name']}")
+        return 0
+
+
+class ConfigFileApply(ApiCommand):
+    """Seed resources from YAML and print newly issued keys once."""
+
+    name = "config file apply"
+    help = "Create missing YAML resources and print new API keys once."
+    arguments = [Argument("file", help="Path to a Janus YAML setup file.")]
+
+    def run(self, api: ApiClient) -> int:
+        from cli.config_file import apply, load_config
+
+        def show_secret(item: dict) -> None:
+            self.line(f"NEW KEY {item['name']}: {item['secret']}")
+
+        actions, secrets = apply(api, load_config(self.argument("file")), on_secret=show_secret)
+        self.line(f"Created {sum(a['action'] == 'create' for a in actions)} resource(s); issued {len(secrets)} key(s).")
+        if secrets:
+            self.line("Save these keys now. Janus cannot show them again.")
+        self.line("Run `janus config apply --gateway SLUG` to deploy each gateway's desired state.")
+        return 0
 
 
 class ConfigShow(ApiCommand):

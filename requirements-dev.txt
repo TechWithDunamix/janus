@@ -74,7 +74,9 @@ python-dotenv==1.2.4
 python-multipart==0.0.33
     # via sillo-framework
 pyyaml==6.0.3
-    # via uvicorn
+    # via
+    #   janus-control-plane (pyproject.toml)
+    #   uvicorn
 redis==8.1.0
     # via
     #   janus-control-plane (pyproject.toml)

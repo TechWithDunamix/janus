@@ -94,6 +94,11 @@ janus serve --reload       # Janus, on :8000
 ```
 
 Define a gateway, upstreams and routes, then `janus config apply`.
+You can also seed gateways, upstreams, routes, rate limits and API keys from
+YAML with `janus config file plan FILE` and `janus config file apply FILE`.
+This creates Janus's desired state; deploy each gateway afterward with
+`janus config apply --gateway SLUG`. The [YAML configuration guide](docs/CONFIG_FILE.md)
+explains the resource model, every field, key handling, and the two apply steps.
 
 **Or try it with demo data:** `janus seed` creates a gateway, seven upstreams, nine
 routes, security rules, 48 hours of traffic, and one account per role.
@@ -268,6 +273,7 @@ janus gateways   list|show|create|delete|status
 janus routes     list|show|create|update|delete|enable|disable
 janus upstreams  list|show|create|delete|health
 janus config     show|validate|diff|apply|history|rollback
+janus config file plan|apply FILE    # seed desired state from YAML; print new keys once
 janus security   block|unblock|allow|deny|blocklist|allowlist
 janus ratelimit  list|create|update|delete
 janus keys       list|create|revoke|rotate

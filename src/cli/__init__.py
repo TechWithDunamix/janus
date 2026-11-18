@@ -130,7 +130,7 @@ COMMANDS = (
     analytics.AnalyticsPerformance,
     # Configuration
     config.ConfigShow, config.ConfigValidate, config.ConfigDiff, config.ConfigApply,
-    config.ConfigHistory, config.ConfigRollback,
+    config.ConfigHistory, config.ConfigRollback, config.ConfigFilePlan, config.ConfigFileApply,
     # Local
     local.Migrate, local.Seed, local.Work, local.Collect, local.Serve,
     local.Worker, local.Scheduler,

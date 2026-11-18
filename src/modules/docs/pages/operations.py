@@ -574,6 +574,11 @@ COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
                 "codes are all `sillo.console`'s. Janus supplies the commands and nothing else."
             ),
             para(
+                "To seed gateway resources from YAML, use `janus config file plan FILE` and "
+                "`janus config file apply FILE`. Read the [YAML configuration guide]"
+                "(/docs/yaml-configuration) for every field and the separate Caddy deployment step."
+            ),
+            para(
                 "The design constraint that shaped it is stated in "
                 "[Roles and permissions](/docs/rbac) and worth repeating here: **the CLI is not "
                 "a second way into the database.** Every administrative command is an HTTP "

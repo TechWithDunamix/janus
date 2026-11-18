@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from modules.docs.pages import gateway, observability, operations, security, start
+from modules.docs.pages import config_file, gateway, observability, operations, security, start
 
 __all__ = ["DOCS", "SECTIONS", "doc_by_slug", "navigation", "neighbours", "search"]
 
@@ -27,6 +27,7 @@ DOCS: tuple[dict[str, Any], ...] = (
     *gateway.PAGES,
     *security.PAGES,
     *observability.PAGES,
+    *config_file.PAGES,
     *operations.PAGES,
 )
 

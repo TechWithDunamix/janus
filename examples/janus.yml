@@ -1,0 +1,35 @@
+# Seed Janus's desired state. Run `janus config apply --gateway edge` to deploy it.
+version: 1
+
+gateways:
+  - slug: edge
+    name: Edge
+    listen: ':8080'
+    upstreams:
+      - slug: orders
+        name: Orders API
+        policy: weighted_round_robin
+        health_path: /health
+        targets:
+          - dial: 127.0.0.1:9000
+            weight: 2
+    routes:
+      - slug: orders-api
+        name: Orders route
+        path: /api/orders*
+        methods: GET,POST
+        upstream: orders
+        priority: 100
+        auth_policy: api_key
+    rate_limits:
+      - name: orders-ip
+        key: ip
+        limit: 100
+        window_seconds: 60
+
+# Janus keys are global gateway-consumer credentials, not children of gateways.
+# The full secrets are generated and printed only on the first apply.
+api_keys:
+  - name: orders-client
+    scopes: [orders:read]
+    expires_in_days: 90
