@@ -1,15 +1,10 @@
 """Where Janus's files live on disk.
 
-Janus keeps its Python packages and its front end side by side in ``src/``::
+Janus keeps its Python packages in ``src/``::
 
     <project>/
-        src/
-            app.html          Inertia root HTML view
-            js/  views/       React front end (built by Vite)
-            public/           static files served at /static
-            main.py  core/  database/  routes/  cli/  modules/
-        static/build/         compiled front end (`bun run build`)
-        storage/              SQLite database, access logs, collector offsets
+        src/main.py, core/, database/, routes/api/, cli/, modules/
+        storage/             default SQLite database and local state
 
 :data:`BASE_DIR` is ``<project>``, resolved in this order:
 
@@ -39,11 +34,7 @@ def project_root() -> Path:
 
 #: The project directory every relative runtime path is resolved against.
 BASE_DIR = project_root()
-#: Python packages, the React sources, the root view and public files.
+#: Python packages.
 SRC_DIR = BASE_DIR / "src"
 #: Local state: the default SQLite database lives here.
 STORAGE_DIR = BASE_DIR / "storage"
-#: Static files served as-is at ``/static`` (favicon and similar).
-PUBLIC_DIR = SRC_DIR / "public"
-#: Vite's output directory; production serves ``assets/`` from here.
-BUILD_DIR = BASE_DIR / "static" / "build"

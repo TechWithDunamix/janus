@@ -25,7 +25,7 @@ asyncpg==0.32.0
     # via janus-control-plane (pyproject.toml)
 bcrypt==5.0.0
     # via sillo-framework
-certifi==2026.10.23
+certifi==2026.11.20
     # via
     #   httpcore
     #   httpx
@@ -47,29 +47,46 @@ idna==3.20
     #   httpx
 iso8601==2.1.0 ; python_full_version < '4'
     # via tortoise-orm
-pydantic==2.14.3
+linkify-it-py==2.2.0
+    # via markdown-it-py
+markdown-it-py==4.3.0
+    # via
+    #   mdit-py-plugins
+    #   rich
+    #   textual
+mdit-py-plugins==0.7.0
+    # via textual
+mdurl==0.1.2
+    # via markdown-it-py
+platformdirs==4.14.8
+    # via textual
+pydantic==2.14.4
     # via sillo-framework
-pydantic-core==2.50.4
+pydantic-core==2.50.5
     # via pydantic
+pygments==2.21.0
+    # via
+    #   rich
+    #   textual
 pypika-tortoise==0.6.5
     # via tortoise-orm
 python-dotenv==1.2.4
     # via uvicorn
-python-multipart==0.0.33
+python-multipart==0.0.34
     # via sillo-framework
-pyyaml==6.0.3
+pyyaml==6.0.4
     # via
     #   janus-control-plane (pyproject.toml)
     #   uvicorn
-redis==8.1.0
+redis==8.2.0
     # via
     #   janus-control-plane (pyproject.toml)
     #   sillo-framework
+rich==15.0.0
+    # via textual
 sillo-framework==1.0.1
-    # via
-    #   janus-control-plane (pyproject.toml)
-    #   sillo-inertia
-sillo-inertia==1.0.0
+    # via janus-control-plane (pyproject.toml)
+textual==8.2.8
     # via janus-control-plane (pyproject.toml)
 tortoise-orm==1.1.9
     # via sillo-framework
@@ -79,6 +96,7 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   sillo-framework
+    #   textual
     #   typing-inspection
 typing-inspection==0.4.5
     # via pydantic

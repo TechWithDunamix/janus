@@ -52,7 +52,6 @@ class Config:
 
     app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "Janus"))
     app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "local"))
-    app_url: str = field(default_factory=lambda: os.getenv("APP_URL", "http://localhost:8000"))
     debug: bool = field(default_factory=lambda: _bool("APP_DEBUG", True))
 
     secret_key: str = field(default_factory=lambda: os.getenv("SECRET_KEY", INSECURE_SECRET))
@@ -121,28 +120,6 @@ class Config:
         default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0")
     )
 
-    # ---- Sessions ---------------------------------------------------------
-    session_cookie_name: str = field(
-        default_factory=lambda: os.getenv("SESSION_COOKIE", "janus_session")
-    )
-    session_lifetime: int = field(default_factory=lambda: _int("SESSION_LIFETIME", 60 * 60 * 12))
-
-    #: Whether session and CSRF cookies carry `Secure`. An explicit setting
-    #: rather than a guess from `app_env`: Janus behind a TLS-terminating proxy
-    #: in staging wants it on, and a plain-HTTP docker-compose wants it off, and
-    #: neither is inferable from the environment's name. A `Secure` cookie on
-    #: http:// is accepted by the browser and then never sent back, which reads
-    #: as "login silently does nothing".
-    cookie_secure: bool = field(
-        default_factory=lambda: _bool("COOKIE_SECURE", os.getenv("APP_ENV", "local") == "production")
-    )
-
-    # ---- Front end --------------------------------------------------------
-    vite_dev: bool = field(default_factory=lambda: _bool("VITE_DEV", True))
-    vite_dev_server: str = field(
-        default_factory=lambda: os.getenv("VITE_DEV_SERVER", "http://localhost:5173")
-    )
-
     # ---- Analytics --------------------------------------------------------
     #: How long request-level rows are kept. Rollups outlive them: the
     #: per-minute aggregates are what the long time ranges read, and they are
@@ -161,12 +138,6 @@ class Config:
         default_factory=lambda: _int("LATENCY_P95_CRITICAL_MS", 1000)
     )
 
-    @property
-    def scheme(self) -> str:
-        """``https`` when ``APP_URL`` is an HTTPS URL, otherwise ``http``."""
-        return "https" if self.app_url.startswith("https://") else "http"
-
-
 # Sillo reads the project's `.env` when the SilloApp is constructed, but this
 # module builds `config` at import time — before that. Load `.env` here first so
 # `uvicorn main:app`, the CLI and the tests all see the same settings. Variables
@@ -177,19 +148,6 @@ load_dotenv()
 
 #: Process-wide settings, read once at import.
 config = Config()
-
-
-def cors_origins() -> list[str]:
-    """Origins allowed to call the API with credentials.
-
-    Defaults to the application's own URL. A wildcard is deliberately not the
-    default: `allow_credentials=True` with `*` is rejected by browsers anyway,
-    and a control plane is not a public API.
-    """
-    raw = os.getenv("CORS_ORIGINS", "")
-    if raw.strip():
-        return [origin.strip() for origin in raw.split(",") if origin.strip()]
-    return [config.app_url]
 
 
 def check_production() -> list[str]:
@@ -207,8 +165,6 @@ def check_production() -> list[str]:
         warnings.append("SECRET_KEY is the development default.")
     if config.debug:
         warnings.append("APP_DEBUG is on.")
-    if not config.cookie_secure:
-        warnings.append("COOKIE_SECURE is off, so session cookies are sent over plain HTTP.")
     if config.caddy_simulate:
         warnings.append(
             "CADDY_SIMULATE is on: Janus is not talking to a real Caddy and all "

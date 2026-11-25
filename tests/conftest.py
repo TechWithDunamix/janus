@@ -30,7 +30,6 @@ import pytest
 os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
 os.environ.setdefault("CADDY_SIMULATE", "true")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
-os.environ.setdefault("VITE_DEV", "false")
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("DB_GENERATE_SCHEMAS", "false")
 

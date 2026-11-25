@@ -6,14 +6,12 @@ not. Authorization in Janus is enforced in one place, the `@endpoint`
 decorator in `routes/api/__init__.py`, and a CLI with its own database
 connection would be a second path to every operation with none of that
 enforcement on it. Running `janus routes delete` as an Analyst has to fail, and
-the only way to be sure it fails is for it to be the same request the dashboard
-would make.
+the only way to be sure it fails is to use the same authenticated API.
 
 The exceptions are marked and few: `migrate`, `seed`, `serve`, `worker` and the
 initial `admin create` are *local* commands. They need the database rather than
 the API, they cannot be performed by a signed-in user through any other route,
-and `admin create` refuses to run once an account exists — see
-`cli/admin.py`.
+and `admin create` refuses to run once an account exists — see `cli/team.py`.
 """
 
 from __future__ import annotations
@@ -121,7 +119,7 @@ class ApiClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
-    def request(self, method: str, path: str, payload: Any = None, **params: Any) -> Any:
+    def request(self, method: str, path: str, payload: Any = None, /, **params: Any) -> Any:
         """Send a request and return the decoded JSON body.
 
         Raises:
@@ -163,18 +161,18 @@ class ApiClient:
             raise CliError(str(body.get("error") or f"HTTP {response.status_code}"))
         return body
 
-    def get(self, path: str, **params: Any) -> Any:
+    def get(self, path: str, /, **params: Any) -> Any:
         """``GET path?params`` — see :meth:`request`."""
         return self.request("GET", path, None, **params)
 
-    def post(self, path: str, payload: Any = None, **params: Any) -> Any:
+    def post(self, path: str, payload: Any = None, /, **params: Any) -> Any:
         """``POST path`` with a JSON body — see :meth:`request`."""
         return self.request("POST", path, payload or {}, **params)
 
-    def patch(self, path: str, payload: Any = None, **params: Any) -> Any:
+    def patch(self, path: str, payload: Any = None, /, **params: Any) -> Any:
         """``PATCH path`` with a JSON body — see :meth:`request`."""
         return self.request("PATCH", path, payload or {}, **params)
 
-    def delete(self, path: str, **params: Any) -> Any:
+    def delete(self, path: str, /, **params: Any) -> Any:
         """``DELETE path`` — see :meth:`request`."""
         return self.request("DELETE", path, None, **params)

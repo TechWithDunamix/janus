@@ -6,7 +6,7 @@ membership tables between them are the framework's too. This module supplies
 the catalogue and the default role definitions, and exposes a single check that
 the route guard, the CLI and the shared props all call.
 
-That "single check" is the load-bearing part. The web dashboard and the CLI are
+That "single check" is the load-bearing part. The API, its CLI and the TUI are
 two front doors onto the same operations, and the way a CLI becomes an RBAC
 bypass is by growing its own idea of who may do what. Here both end up in
 :func:`require`, so a permission added to a route is a permission the CLI

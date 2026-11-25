@@ -103,7 +103,7 @@ Routes are created in the Janus database first. They do not affect live
 traffic until `janus config apply --gateway SLUG` succeeds. The YAML format
 currently covers only route fields supported by Janus's route-create API.
 Manage domains, rewrites, headers, canaries, maintenance, and other route
-settings in the dashboard or API.
+settings through the API.
 
 ### Rate-limit fields
 

@@ -96,7 +96,6 @@ services:
       # A real Caddy is running beside this container, so nothing is simulated.
       CADDY_SIMULATE: "false"
 
-      VITE_DEV: "false"
     volumes:
       - caddy-logs:/var/log/caddy:ro
       - janus-storage:/app/storage

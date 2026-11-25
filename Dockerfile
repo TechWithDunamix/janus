@@ -1,26 +1,7 @@
 # Janus — the control plane. Not the data plane: Caddy is its own image, and
 # nothing in here proxies traffic.
-#
-# Two stages, because the front end needs Node and the runtime does not. The
-# runtime image carries Python, the compiled assets and the `caddy` binary —
-# the last one so `config validate` can provision a candidate configuration in
-# a throwaway process before it is sent anywhere. Without it Janus falls back
-# to structural checks and says so, which is a weaker guarantee than a
-# deployment should settle for.
+# This image includes Caddy for local configuration validation.
 
-# ---------------------------------------------------------------------------
-FROM node:22-alpine AS assets
-WORKDIR /build
-
-COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund
-
-COPY tsconfig.json vite.config.ts ./
-COPY src/js ./src/js
-COPY src/views ./src/views
-RUN npm run build
-
-# ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -43,15 +24,11 @@ RUN apt-get update \
 WORKDIR /app
 
 # requirements.txt pins every runtime dependency and ends with `-e .`, so the
-# source (Python packages, src/app.html, src/public) must be in place first.
 COPY pyproject.toml README.md requirements.txt ./
 COPY src ./src
 RUN pip install -r requirements.txt
 
-COPY --from=assets /build/static/build ./static/build
 
-# Assets are compiled into the image, so there is no dev server to reach.
-ENV VITE_DEV=false
 
 RUN useradd --create-home --uid 10001 janus \
  && mkdir -p /app/storage && chown -R janus:janus /app/storage

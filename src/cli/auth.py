@@ -6,13 +6,13 @@ import os
 
 from sillo.console import Command, Option
 
-from cli.base import ApiCommand, json_flag
+from cli.base import ApiCommand, _Base, json_flag
 from cli.client import ApiClient, CliError, clear_token, load_token, save_token
 
 __all__ = ["Login", "Logout", "Whoami"]
 
 
-class Login(Command):
+class Login(_Base):
     """Exchange credentials for a token and store it."""
 
     name = "login"
@@ -41,7 +41,11 @@ class Login(Command):
         # `secret` never echoes and never appears in shell history, which is
         # why the password is not an option flag: `--password hunter2` would be
         # in `~/.zsh_history` and in the process list.
-        password = self.secret("Password")
+        try:
+            password = self.read_password()
+        except CliError as error:
+            self.error(str(error))
+            return 1
 
         client = ApiClient(url=url, token=None)
         try:

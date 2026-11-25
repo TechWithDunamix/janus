@@ -1,10 +1,4 @@
-"""Authorization: every role, every permission, on both front doors.
-
-The point of this module is that the dashboard and the CLI are the same gate.
-Each operation is tested through the JSON API — which is what the CLI calls —
-*and* through the dashboard route, so a permission that is enforced in one
-place and not the other fails here rather than in production.
-"""
+"""Authorization checks for the CLI and JSON API."""
 
 from __future__ import annotations
 
@@ -17,7 +11,7 @@ from modules.auth.permissions import (
     permissions_of,
     require,
 )
-from tests.helpers import api_token, auth_headers, csrf, make_gateway, make_user, sign_in
+from tests.helpers import api_token, auth_headers, make_gateway, make_user
 
 
 class TestTheCatalogue:
@@ -124,67 +118,7 @@ async def test_the_api_enforces_the_matrix(client, role, method, path, body, exp
     )
 
 
-#: The dashboard half of the same question.
-PAGE_MATRIX = [
-    ("Viewer", "/", 200),
-    ("Viewer", "/routes", 200),
-    ("Viewer", "/team/roles", 200),
-    ("Analyst", "/analytics", 200),
-    ("Analyst", "/configuration", 403),
-    ("Analyst", "/team/users", 403),
-    ("Operator", "/configuration", 200),
-    ("Operator", "/security/rate-limits", 200),
-    ("Operator", "/team/roles", 200),
-    ("Owner", "/team/users", 200),
-]
-
-
-@pytest.mark.parametrize("role,path,expected", PAGE_MATRIX)
-async def test_dashboard_pages_enforce_the_matrix(client, role, path, expected):
-    await make_gateway()
-    user = await make_user(f"{role.lower()}2@test.local", role=role)
-    await sign_in(client, user)
-    response = await client.get(path)
-    assert response.status_code == expected, f"{role} {path} -> {response.status_code}"
-
-
-class TestActionsRefuseAndReturn:
-    async def test_a_refused_dashboard_action_sends_the_user_back(self, client):
-        """A rejected form post must not replace the page with an error screen:
-        that loses whatever the operator had typed."""
-        gateway = await make_gateway()
-        user = await make_user("analyst2@test.local", role="Analyst")
-        await sign_in(client, user)
-
-        response = await client.post(
-            "/routes/save",
-            json={"name": "Blocked", "path": "/x"},
-            headers=csrf(client),
-        )
-        assert response.status_code in (302, 303, 409)
-
-        from database.models import GatewayRoute
-
-        assert await GatewayRoute.filter(gateway_id=gateway.pk).count() == 0
-
-
 class TestCliIsNotABypass:
-    async def test_the_same_operation_is_refused_on_both_doors(self, client):
-        """The regression this whole design exists to prevent."""
-        await make_gateway()
-        analyst = await make_user("analyst3@test.local", role="Analyst")
-
-        token = await api_token(client, analyst)
-        api = await client.post(
-            "/api/routes", json={"name": "x", "path": "/x"}, headers=auth_headers(token)
-        )
-        assert api.status_code == 403
-        assert api.json()["permission"] == "routes.write"
-
-        await sign_in(client, analyst)
-        page = await client.get("/configuration")
-        assert page.status_code == 403
-
     async def test_a_disabled_user_loses_api_access_immediately(self, client):
         await make_gateway()
         user = await make_user("temp@test.local", role="Owner", superuser=True)

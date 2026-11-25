@@ -1,7 +1,7 @@
 """Local commands: migrate, seed, serve, worker, scheduler, work, collect.
 
 These need the database or the process, not the API. None of them performs an
-operation a signed-in user could perform through the dashboard, so none of them
+operation a signed-in user could perform through the API, so none of them
 is a way around authorization — see `cli/base.py` for the split.
 """
 

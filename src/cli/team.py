@@ -58,7 +58,7 @@ class AdminCreate(LocalCommand):
             return 1
 
         name = self.option("name") or self.ask("Full name")
-        password = self.secret("Password", confirm=True)
+        password = self.read_password(confirm=True)
         if len(password) < 10:
             self.error("Choose a password of at least 10 characters.")
             return 1
@@ -146,7 +146,7 @@ class UserCreate(ApiCommand):
         name = self.option("name") or ""
         # Prompted, never a flag: a password on the command line ends up in
         # shell history and in the process list.
-        password = self.secret("Password", confirm=True)
+        password = self.read_password(confirm=True)
         result = api.post(
             "/api/users",
             {

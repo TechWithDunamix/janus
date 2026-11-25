@@ -29,9 +29,9 @@ sillo release workflows use.
 | Unit | Role |
 |---|---|
 | `janus-migrate.service` | `oneshot` — `janus migrate`. Everything else requires it. |
-| `janus-web.service` | the dashboard + JSON API: `uvicorn main:app --workers ${JANUS_WEB_WORKERS}`. |
+| `janus-web.service` | the JSON API: `uvicorn main:app --workers ${JANUS_WEB_WORKERS}`. |
 | `janus-scheduler.service` | the periodic jobs — access-log ingestion, upstream health, drift detection, alerts, retention. **Exactly one** across the deployment. |
-| `janus-worker.service` | drains the queues the scheduler and dashboard dispatch to. Only useful with `QUEUE_BACKEND=redis`; the installer leaves it disabled otherwise. |
+| `janus-worker.service` | drains the queues the scheduler and API dispatch to. Only useful with `QUEUE_BACKEND=redis`; the installer leaves it disabled otherwise. |
 | `janus.target` | convenience: `systemctl restart janus.target`. |
 
 ### Queue backend
@@ -60,15 +60,7 @@ Janus writes **only** the server block it owns (`apps/http/servers/<name>`) and
 its access log; it never PUTs the config root. If your Caddy runs elsewhere,
 pass `--no-caddy` and set `CADDY_ADMIN_URL` in `/etc/janus/janus.env`.
 
-The Janus *dashboard* still needs its own TLS front — a separate Caddy site or
-proxy pointing at `127.0.0.1:8000`.
-
-## Front end
-
-`static/build/` is not committed. `install.sh` installs [Bun](https://bun.sh)
-(into `/usr/local/bin` if absent) and builds it with `bun install && bun run
-build`; pass `--no-build` to skip it and build elsewhere, then `rsync` it into
-`/opt/janus/`.
+Remote API access needs a TLS proxy pointing at `127.0.0.1:8000`.
 
 ## Uninstall
 

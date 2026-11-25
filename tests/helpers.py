@@ -16,7 +16,6 @@ __all__ = [
     "make_gateway",
     "make_upstream",
     "make_user",
-    "sign_in",
 ]
 
 PASSWORD = "correct-horse-battery"
@@ -75,22 +74,6 @@ async def make_domain(gateway: Gateway, hostname: str = "api.test.local") -> Dom
     return await Domain.create(gateway_id=gateway.pk, hostname=hostname, tls_mode="off")
 
 
-async def sign_in(client, user: User, password: str = PASSWORD) -> None:
-    """Sign a user in through the real login route.
-
-    Deliberately not by writing the session directly: the login path is where
-    the session shape, the CSRF exchange and the `UserSession` row are decided,
-    and a test that skipped it would not notice any of them breaking.
-    """
-    await client.get("/login")
-    response = await client.post(
-        "/login",
-        json={"email": user.email, "password": password},
-        headers=csrf(client),
-    )
-    assert response.status_code == 302, f"sign-in failed: {response.status_code} {response.text[:200]}"
-
-
 async def api_token(client, user: User, password: str = PASSWORD) -> str:
     """A CLI bearer token, minted the way `janus login` mints one."""
     response = await client.post(
@@ -102,8 +85,3 @@ async def api_token(client, user: User, password: str = PASSWORD) -> str:
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
-
-def csrf(client) -> dict[str, str]:
-    """Headers for a browser-style POST."""
-    return {"X-XSRF-TOKEN": client.cookies.get("XSRF-TOKEN") or ""}

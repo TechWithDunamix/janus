@@ -7,9 +7,9 @@
 # always read what a target does and run it by hand when you need to vary it.
 
 .DEFAULT_GOAL := help
-.PHONY: help check-venv env install requirements build setup deploy migrate seed admin \
-        config-show config-apply scheduler worker cli dev serve caddy-setup \
-        caddy-run test typecheck lint format check clean
+.PHONY: help check-venv env install requirements setup deploy migrate seed admin \
+        config-show config-apply scheduler worker cli tui dev serve caddy-setup \
+        caddy-run test lint format check clean
 
 # uv-managed venvs (what deploy/install.sh and `uv venv` create) have no pip
 # inside them — prefer uv when it is on PATH, fall back to python -m pip.
@@ -22,8 +22,6 @@ PORT    ?= 8000
 WORKERS ?= 1
 # The plugin Janus most often needs — stock Caddy has no rate limiter.
 PLUGIN  ?= github.com/mholt/caddy-ratelimit
-# bun when present (what deploy/install.sh uses), npm otherwise.
-NODE    := $(shell command -v bun 2>/dev/null || command -v npm 2>/dev/null)
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -50,21 +48,15 @@ env: check-venv  ## Create .env: fresh SECRET_KEY, local service hosts
 
 # requirements-dev.txt pins every dependency (runtime + test/lint tools) and
 # installs this project in editable mode, so src/ is importable everywhere.
-install: check-venv  ## Install pinned Python packages and front-end dependencies
+install: check-venv  ## Install pinned Python packages
 	$(PIP) -r requirements-dev.txt
-	@test -n "$(NODE)" || { echo "  need bun or npm on PATH for the front end"; exit 1; }
-	$(NODE) install
 
 requirements:  ## Regenerate requirements*.txt from pyproject.toml (needs uv)
 	scripts/update-requirements.sh
 
-build:  ## Build the front end into static/build
-	@test -n "$(NODE)" || { echo "  need bun or npm on PATH for the front end"; exit 1; }
-	$(NODE) run build
+setup: env install migrate  ## Prepare environment, packages and database
 
-setup: env install build migrate  ## Everything except running: .env, packages, front end, database
-
-deploy: check-venv setup  ## Install everything, build, migrate — then deploy the app
+deploy: check-venv setup  ## Install, migrate, then deploy the app
 	# The foreground command is inlined rather than `$(MAKE) serve` because make
 	# executes $(MAKE) lines even under `-n` — a dry run would really restart
 	# systemd on a production host.
@@ -103,6 +95,9 @@ scheduler:  ## Periodic jobs — ingestion, health, drift, alerts. Exactly one.
 worker:  ## Drain the job queues (needs QUEUE_BACKEND=redis)
 	$(JANUS) worker
 
+tui:  ## Open the interactive terminal console (live requests, routes, security, deploys)
+	$(JANUS) tui
+
 cli:  ## Any CLI command: make cli ARGS="routes list"
 	$(JANUS) $(ARGS)
 
@@ -119,7 +114,7 @@ caddy-run:  ## Start Caddy with an empty bootstrap config (admin API on :2019)
 
 # -- running -------------------------------------------------------------
 
-dev:  ## Reloadable server; run `npm run dev` alongside it (Vite, VITE_DEV=true)
+dev:  ## Reloadable API server
 	$(JANUS) serve --reload --host 127.0.0.1 --port $(PORT)
 
 serve:  ## Run in the foreground as production would (HOST/PORT/WORKERS overridable)
@@ -130,9 +125,6 @@ serve:  ## Run in the foreground as production would (HOST/PORT/WORKERS overrida
 test:  ## Run the test suite
 	pytest -q
 
-typecheck:  ## Type-check the front end
-	$(NODE) run typecheck
-
 lint:  ## Check style and lint rules
 	ruff check .
 
@@ -140,9 +132,9 @@ format:  ## Apply formatting and fixable lint rules
 	ruff format .
 	ruff check --fix .
 
-check: lint typecheck test  ## Everything CI runs
+check: lint test  ## Everything CI runs
 
-clean:  ## Remove caches and build artefacts (static/build is kept — it is what production serves)
+clean:  ## Remove caches and build artefacts
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .pytest_cache .ruff_cache dist build *.egg-info
 

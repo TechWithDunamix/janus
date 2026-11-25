@@ -13,7 +13,9 @@ The command set is grouped by noun, and the grouping is in the names
 
 from __future__ import annotations
 
+import logging
 import os
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -52,7 +54,19 @@ _load_env_file()
 
 from sillo.console import Command, Console  # noqa: E402
 
-from cli import analytics, auth, config, gateway, local, modules, security, team  # noqa: E402
+from cli import (  # noqa: E402
+    analytics,
+    audit,
+    auth,
+    config,
+    gateway,
+    local,
+    modules,
+    operations,
+    security,
+    team,
+    tui,
+)
 
 __all__ = ["COMMANDS", "JanusConsole", "build_console", "main"]
 
@@ -128,6 +142,10 @@ COMMANDS = (
     analytics.AnalyticsOverview, analytics.AnalyticsRoutes, analytics.AnalyticsErrors,
     analytics.AnalyticsClients, analytics.AnalyticsTraffic, analytics.AnalyticsProblematic,
     analytics.AnalyticsPerformance,
+    audit.AuditList,
+    # Day-to-day operations
+    *operations.COMMANDS,
+    tui.Tui,
     # Configuration
     config.ConfigShow, config.ConfigValidate, config.ConfigDiff, config.ConfigApply,
     config.ConfigHistory, config.ConfigRollback, config.ConfigFilePlan, config.ConfigFileApply,
@@ -147,4 +165,22 @@ def build_console() -> Console:
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point of the ``janus`` command; returns the process exit code."""
-    return build_console().main(argv)
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if not tokens or tokens[0] != "serve":
+        # "Database connected/closed" around every local command is noise in a terminal tool.
+        logging.getLogger("sillo.record").setLevel(logging.WARNING)
+    console = build_console()
+    if tokens and tokens[0] == "commands":
+        if len(tokens) > 2:
+            print("Usage: janus commands [group]", file=sys.stderr)
+            return 2
+        group = tokens[1] if len(tokens) == 2 else ""
+        matches = sorted((name, command.help) for name, command in console.commands.items()
+                         if not group or name.split()[0] == group)
+        if not matches:
+            print(f"Unknown command group: {group}", file=sys.stderr)
+            return 2
+        for name, description in matches:
+            print(f"{name:<28} {description}")
+        return 0
+    return console.main(tokens)

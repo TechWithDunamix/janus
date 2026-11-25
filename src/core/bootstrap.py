@@ -11,26 +11,16 @@ from __future__ import annotations
 from typing import Any
 
 from sillo import SilloApp
-from sillo.auth import AuthenticationMiddleware
-from sillo.auth.session_auth import SessionAuthBackend
 from sillo.middleware import BaseMiddleware
 from sillo.record import setup_record
-from sillo.security import CorsConfig, CORSMiddleware
-from sillo.security.csrf import CSRFConfig, CSRFMiddleware
-from sillo.session import SessionConfig, SessionMiddleware
 
-from core.config import check_production, config, cors_origins
-from core.inertia import build_inertia, share_globals
-from core.paths import BUILD_DIR, PUBLIC_DIR
-from database.models import User
+from core.config import check_production, config
 
 __all__ = ["create_app"]
 
 
 def create_app() -> SilloApp:
     """Build and return the configured application."""
-    from routes.web import routes as web_routes
-
     warnings = check_production()
     if warnings:
         # Refuse rather than warn. Every item in this list is a way for a
@@ -46,106 +36,20 @@ def create_app() -> SilloApp:
         debug=config.debug,
         title=config.app_name,
         version="1.0.0",
+        docs=[],  # keep machine-readable OpenAPI, omit browser viewers
         # Copied, because the parameter's default is a shared mutable list and
         # handing it our own keeps the two from ever being the same object.
-        routes=list(web_routes),
+        routes=[],
     )
 
-    _register_middleware(application)
+    application.use(_ResetAnalyticsMemo())
     _register_database(application)
     _register_work(application)
-    _register_static(application)
-    _register_public(application)
     _register_routers(application)
     _register_health(application)
     _register_bootstrap_hooks(application)
 
     return application
-
-
-def _register_middleware(application: SilloApp) -> None:
-    """Attach middleware.
-
-    `application.use()` builds the chain inside-out: whatever is registered
-    *last* ends up outermost and runs *first* on the way in. The registrations
-    below are in reverse of runtime order, which is
-
-        CORS → session → CSRF → authentication → Inertia → handler
-
-    Each position is load-bearing:
-
-    * Session is outside authentication because `SessionAuthBackend` reads
-      `ctx.session`. The other way round and `ctx.user` is never set.
-    * Inertia is innermost because route modules call the module-level
-      `render()`, which resolves the adapter from a context variable that only
-      exists inside this middleware. It also reads and clears the flash and
-      error bags, which live in the session — so it must be inside that too.
-    * CSRF is outside authentication so a rejected token never reaches a
-      database lookup.
-    """
-    # Outermost of Janus's own middleware, so the analytics memo is reset
-    # before any handler or deferred prop resolves. It has to be per request:
-    # a process-wide cache would serve one operator's numbers to the next.
-    application.use(_ResetAnalyticsMemo())
-
-    inertia = build_inertia()
-    share_globals(inertia)
-    inertia.middleware(application)
-    application.state["inertia"] = inertia
-
-    application.use(
-        AuthenticationMiddleware(user_model=User, backend=SessionAuthBackend())
-    )
-
-    # Inertia's client is axios, which auto-attaches a CSRF header on unsafe
-    # methods — but under its own convention: it reads the `XSRF-TOKEN` cookie
-    # and sends `X-XSRF-TOKEN`. Sillo's defaults are `csrftoken` and
-    # `X-CSRFToken`, so left alone every POST from the front end is rejected
-    # with 403 and nothing on either side explains why.
-    #
-    # `httponly` is off for this cookie alone, because axios cannot read a
-    # cookie the browser hides from JavaScript. That is safe precisely because
-    # the token is useless without the session cookie, which stays httponly.
-    application.use(
-        CSRFMiddleware(
-            config=CSRFConfig(
-                enabled=True,
-                cookie_name="XSRF-TOKEN",
-                header_name="X-XSRF-TOKEN",
-                cookie_httponly=False,
-                cookie_secure=config.cookie_secure,
-                secret_key=config.secret_key,
-                # The JSON API is exempt, and it has to be. CSRF exists to stop
-                # a cross-site request riding on credentials the *browser*
-                # attaches by itself — cookies. `/api` authenticates on an
-                # `Authorization: Bearer` header and on nothing else: a session
-                # cookie sent to it is ignored by `routes/api::actor_for`, and
-                # a cross-site form cannot set that header. So there is no
-                # credential for a forged request to ride on, and leaving the
-                # check on would reject every CLI call with "CSRF token missing
-                # from cookies" — which is exactly what it did before this line
-                # existed.
-                exempt_urls=[r"^/api/.*"],
-            )
-        )
-    )
-
-    application.use(
-        SessionMiddleware(
-            config=SessionConfig(
-                session_cookie_name=config.session_cookie_name,
-                session_expiration_time=config.session_lifetime,
-                session_cookie_secure=config.cookie_secure,
-            ),
-            secret_key=config.secret_key,
-        )
-    )
-
-    application.use(
-        CORSMiddleware(
-            config=CorsConfig(allow_origins=cors_origins(), allow_credentials=True)
-        )
-    )
 
 
 class _ResetAnalyticsMemo(BaseMiddleware):
@@ -211,46 +115,8 @@ def _register_bootstrap_hooks(application: SilloApp) -> None:
     application.on_startup(_ensure_roles)
 
 
-def _register_static(application: SilloApp) -> None:
-    """Serve the compiled front end.
-
-    Only used when `VITE_DEV` is off. The mount point is `/assets` because that
-    is what the adapter builds URLs against: it takes each file named in the
-    Vite manifest, strips the leading `assets/`, and prefixes `asset_prefix`.
-    So the directory served here is the `assets` folder *inside* the build
-    output, not the build output itself — mount one level up and every script
-    404s against a manifest that is perfectly correct.
-    """
-    from sillo.core.routing import Group
-    from sillo.static import StaticFiles
-
-    assets = BUILD_DIR / "assets"
-    if not assets.is_dir():
-        # Nothing built yet. Mounting a missing directory raises at startup,
-        # which would make `npm run build` a prerequisite for the tests.
-        return
-    application.add_route(Group(path="/assets", app=StaticFiles(directory=str(assets))))
-
-
-def _register_public(application: SilloApp) -> None:
-    """Serve `src/public/` — checked-in assets that keep their names across deploys."""
-    from sillo.core.routing import Group
-    from sillo.static import StaticFiles
-
-    public = PUBLIC_DIR
-    if not public.is_dir():
-        return
-    application.add_route(Group(path="/static", app=StaticFiles(directory=str(public))))
-
-
 def _register_routers(application: SilloApp) -> None:
-    """Mount the prefixed routers.
-
-    Pages went into `SilloApp(routes=...)` as `Route` objects, each an exact
-    path, so nothing they claim overlaps what is mounted here. Only the
-    genuinely prefixed tree is a router: a mounted router claims its entire
-    prefix subtree, so a prefix-less one would swallow every page.
-    """
+    """Mount the JSON API used by the CLI and automation."""
     from routes.api import router as api_router
 
     application.mount_router(api_router)  # /api

@@ -19,10 +19,19 @@ from sillo.console.arguments import ParsedInput
 from sillo.console.output import Output
 from sillo.console.prompt import Prompt
 
-from cli import COMMANDS, build_console
+from cli import COMMANDS, build_console, main
 from cli.base import ApiCommand, LocalCommand
 from cli.client import ApiClient, CliAuthRequired, clear_token, load_token, save_token
 from tests.helpers import make_user
+
+
+def test_terminal_command_discovery(capsys):
+    assert main(["commands", "audit"]) == 0
+    assert "audit list" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as exited:  # tui is a regular command; the console exits with its code
+        main(["tui"])
+    assert exited.value.code == 2
+    assert "interactive terminal" in capsys.readouterr().err
 
 
 def build_command(command_class, *, arguments=None, options=None, flags=None):

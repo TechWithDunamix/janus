@@ -1,10 +1,7 @@
 """The JSON API.
 
-Two audiences, one implementation. The dashboard uses Inertia and does not need
-this; what does is the CLI, and anything else automating Janus. Every endpoint
-here goes through the same permission check the dashboard's routes use — the
-CLI authenticates with a bearer token, resolves to a real user, and is then
-subject to exactly the same `require()` call.
+The CLI and automation use this API. Every endpoint authenticates a bearer
+token, resolves it to a user, and applies the same `require()` permission check.
 
 That is what stops the CLI from being an RBAC bypass, and it is structural
 rather than a convention: there is no code path in this file that performs an
@@ -1318,3 +1315,6 @@ for _route in (
     Route("/audit", handler=api_audit, methods=["GET"], name="api.audit"),
 ):
     router.add_route(_route)
+
+# Domains, policies, the request log, security clients, maintenance: registered on the same router.
+from routes.api import operations  # noqa: E402,F401

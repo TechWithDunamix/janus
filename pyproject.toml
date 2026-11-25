@@ -9,11 +9,10 @@ description = "API gateway control plane and observability platform, built on Si
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # Sillo does the framework-level work: routing, middleware, sessions, auth,
+    # Sillo does the framework-level work: routing, middleware, auth,
     # permissions, the ORM, migrations, validation, the console, the queue and
     # the scheduler. Janus adds a domain on top of it and no framework of its own.
     "sillo-framework[cache,hashing-bcrypt,record]==1.0.1",
-    "sillo-inertia==1.0.0",
     # The only client Janus needs. Caddy's admin API is plain HTTP, so there is
     # no vendor SDK in the dependency list and no release cadence but Caddy's
     # own that can break this build. Capped below 1.0 — the 1.0 dev line drops
@@ -22,6 +21,8 @@ dependencies = [
     "httpx>=0.28.1,<1",
     "aiosqlite>=0.19.0",
     "PyYAML>=6.0,<7",
+    # `janus tui`, the interactive terminal console.
+    "textual>=6.0,<9",
 ]
 
 [project.optional-dependencies]

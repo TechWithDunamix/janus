@@ -10,7 +10,6 @@
 #     Janus manages), and — when asked — Redis and PostgreSQL
 #   * creates the `janus` system user, /opt/janus and /etc/janus
 #   * syncs this checkout into /opt/janus and builds the venv
-#   * builds the front end with Bun if it is available (installed if absent)
 #   * writes /etc/janus/janus.env on first run (generates SECRET_KEY); never
 #     overwrites an existing one
 #   * installs the systemd units, runs migrations, starts the web tier, the
@@ -20,10 +19,9 @@
 #   --redis            install + enable a local Redis (shared job queue)
 #   --postgres         install + enable a local PostgreSQL, create the janus DB
 #   --no-caddy         do NOT install Caddy (you manage it elsewhere)
-#   --no-build         skip the front-end build even if Bun is present
 #   --app-dir DIR      install location (default /opt/janus)
 #   --user NAME        service account (default janus)
-#   --domain HOST      write APP_URL / CORS_ORIGINS for this host on first run
+#   --domain HOST      set the CLI URL for this host on first run
 #   --port N           listen port for janus-web (default 8000)
 #   --host ADDR        bind address for janus-web (default 127.0.0.1)
 #   --public           bind 0.0.0.0 — reachable directly from the internet
@@ -33,7 +31,7 @@ set -euo pipefail
 APP=janus
 APP_DIR=/opt/janus
 APP_USER=janus
-DO_REDIS=0 DO_PG=0 DO_CADDY=1 DO_BUILD=1 DOMAIN="" PORT="" HOST=""
+DO_REDIS=0 DO_PG=0 DO_CADDY=1 DOMAIN="" PORT="" HOST=""
 PY_EXTRAS="server,postgres,redis"
 
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
@@ -47,7 +45,6 @@ while [[ $# -gt 0 ]]; do
     --redis) DO_REDIS=1;;
     --postgres) DO_PG=1;;
     --no-caddy) DO_CADDY=0;;
-    --no-build) DO_BUILD=0;;
     --app-dir) APP_DIR="$2"; shift;;
     --user) APP_USER="$2"; shift;;
     --domain) DOMAIN="$2"; shift;;
@@ -109,25 +106,6 @@ else
 fi
 UV="$(command -v uv || echo /usr/local/bin/uv)"
 [[ -x "$UV" ]] || die "uv install failed"
-
-# Bun builds the front end (bun install && bun run build). Installed system-wide
-# into /usr/local/bin so the service account can reach it. Skipped with --no-build.
-if [[ $DO_BUILD == 1 ]]; then
-  if command -v bun >/dev/null; then
-    log "bun already installed ($(bun --version))"
-  else
-    log "Installing bun into /usr/local/bin"
-    curl -fsSL https://bun.sh/install | env BUN_INSTALL=/usr/local bash
-  fi
-  BUN="$(command -v bun || echo /usr/local/bin/bun)"
-  [[ -x "$BUN" ]] || die "bun install failed"
-  # Vite's launcher is `#!/usr/bin/env node`, and some plugins spawn `node`
-  # directly. Point it at bun's node-compatible shim if the box has no Node.
-  if ! command -v node >/dev/null; then
-    ln -sf "$BUN" /usr/local/bin/node
-    log "Linked /usr/local/bin/node -> bun (no system Node present)"
-  fi
-fi
 
 # --------------------------------------------------------------------------
 # Caddy — the data plane Janus manages (unless --no-caddy)
@@ -235,21 +213,6 @@ run_uv venv --python "$PYTHON" "$APP_DIR/.venv"
 run_uv pip install --python "$APP_DIR/.venv/bin/python" --prerelease=allow -e ".[$PY_EXTRAS]"
 
 # --------------------------------------------------------------------------
-# front end
-# --------------------------------------------------------------------------
-if [[ $DO_BUILD == 1 ]] && command -v bun >/dev/null; then
-  FROZEN=""; [[ -f "$APP_DIR/bun.lock" || -f "$APP_DIR/bun.lockb" ]] && FROZEN="--frozen-lockfile"
-  log "Building the front end (bun install $FROZEN && bun run --bun build)"
-  sudo -u "$APP_USER" env HOME="$APP_DIR" PATH="/usr/local/bin:$PATH" \
-    sh -c 'cd "$1" && shift && exec "$@"' _ "$APP_DIR" "$BUN" install $FROZEN
-  # --bun forces bun's runtime for vite instead of letting its shebang find node.
-  sudo -u "$APP_USER" env HOME="$APP_DIR" PATH="/usr/local/bin:$PATH" \
-    sh -c 'cd "$1" && shift && exec "$@"' _ "$APP_DIR" "$BUN" run --bun build
-elif [[ ! -f "$APP_DIR/static/build/.vite/manifest.json" ]]; then
-  warn "No front-end build present and Bun is unavailable — build static/build/ elsewhere and copy it in."
-fi
-
-# --------------------------------------------------------------------------
 # env file
 # --------------------------------------------------------------------------
 ENV_FILE="/etc/$APP/$APP.env"
@@ -264,7 +227,7 @@ else
   [[ -n "${NEW_DATABASE_URL:-}" ]] && sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${NEW_DATABASE_URL}|" "$ENV_FILE"
   [[ $DO_REDIS == 0 ]] && sed -i "s|^QUEUE_BACKEND=redis|QUEUE_BACKEND=memory|" "$ENV_FILE"
   if [[ -n "$DOMAIN" ]]; then
-    sed -i "s|^APP_URL=.*|APP_URL=https://$DOMAIN|;s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN|" "$ENV_FILE"
+    sed -i "s|^JANUS_URL=.*|JANUS_URL=https://$DOMAIN|" "$ENV_FILE"
   fi
 fi
 # --port / --host apply on every run (runtime settings, not one-time seeds).
@@ -313,12 +276,12 @@ $(printf '\033[1;32m✔  Janus is installed.\033[0m')
 Next:
 
   1. Create the first operator:
-       sudo -u $APP_USER $APP_DIR/.venv/bin/janus admin create you@example.com   # or: janus user create ...
+       sudo -u $APP_USER $APP_DIR/.venv/bin/janus admin create you@example.com
 
   2. Point Janus at your Caddy in $ENV_FILE (CADDY_ADMIN_URL) if it is not the
-     local instance on :2019, then in the dashboard create a gateway and deploy.
+     local instance on :2019, then run janus login, janus gateways create, and janus config apply.
 
-  3. Put the dashboard behind TLS (a second Caddy site, or a separate proxy).
+  3. Put remote API access behind TLS (a second Caddy site, or a separate proxy).
 
 To upgrade later: git pull in this checkout, then re-run this script.
 DONE

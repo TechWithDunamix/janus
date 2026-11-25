@@ -4,8 +4,8 @@ Two base classes, and the difference between them is the whole security story
 of the CLI:
 
 * :class:`ApiCommand` performs its work through the Janus API, authenticated
-  with the token from `janus login`. Authorization is the API's, which is the
-  dashboard's. There is no way for a command built on this to do something its
+  with the token from `janus login`. Authorization is the API's, the same
+  for every client. There is no way for a command built on this to do something its
   user may not do.
 * :class:`LocalCommand` opens the database directly. Only five commands do
   this — migrate, seed, serve, worker, scheduler — plus the bootstrap
@@ -16,13 +16,62 @@ from __future__ import annotations
 
 import asyncio
 import json as jsonlib
+import os
+import re
+import shutil
+import sys
+from collections.abc import Sequence
 from typing import Any
 
 from sillo.console import Command, Flag
+from sillo.console.terminal import is_interactive
 
 from cli.client import ApiClient, CliAuthRequired, CliError
 
-__all__ = ["ApiCommand", "LocalCommand", "json_flag"]
+__all__ = ["ApiCommand", "LocalCommand", "cell", "json_flag", "render_table"]
+
+#: A timestamp as the API sends it; shown to the second.
+ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$")
+
+
+def cell(value: Any, *, wide: bool = False) -> str:
+    """One table cell: ``-`` for nothing, lists joined, timestamps shortened, long text cut."""
+    if value is None or value == "" or value == []:
+        return "-"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (list, tuple)):
+        value = ", ".join(str(v) for v in value)
+    elif isinstance(value, dict):
+        value = jsonlib.dumps(value, default=str)
+    text = str(value)
+    if ISO_TIME.match(text):
+        text = text[:10] + " " + text[11:19]
+    limit = 400 if wide else 60
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def render_table(headers: Sequence[str], body: Sequence[Sequence[str]], width: int | None = None) -> list[str]:
+    """Aligned text lines for a table.
+
+    On a terminal that is too narrow the widest column gives way first (short columns such as STATUS stay
+    readable); piped output is never cut, so scripts see every value.
+    """
+    widths = [max([len(h)] + [len(r[i]) for r in body]) for i, h in enumerate(headers)]
+    if width is None and sys.stdout.isatty():
+        width = shutil.get_terminal_size((120, 24)).columns
+    if width:
+        room = width - 1 - 2 * (len(widths) - 1)
+        while sum(widths) > room and max(widths) > 8:
+            widths[widths.index(max(widths))] -= 1
+
+    def fit(text: str, size: int) -> str:
+        return (text if len(text) <= size else text[: size - 1] + "…").ljust(size)
+
+    lines = ["  ".join(fit(h, w) for h, w in zip(headers, widths, strict=True)).rstrip(),
+             "  ".join("─" * w for w in widths)]
+    lines += ["  ".join(fit(c, w) for c, w in zip(row, widths, strict=True)).rstrip() for row in body]
+    return lines
 
 
 def json_flag() -> Flag:
@@ -42,6 +91,31 @@ class _Base(Command):
         """Print JSON. Used by every command's `--json` path."""
         self.line(jsonlib.dumps(payload, indent=2, default=str))
 
+    def table(self, headers: Sequence[str], rows: Sequence[Sequence[Any]], align: Any = None) -> None:
+        """Draw a table (see :func:`render_table`)."""
+        for line in render_table(list(headers), [[str(c) for c in row] for row in rows]):
+            self.line(line)
+
+    def rows(self, rows: list[dict], columns: list[tuple[str, str]], empty: str = "Nothing yet.") -> int:
+        """Print ``rows`` as a table of ``columns`` (``(heading, key)``), or JSON with ``--json``."""
+        if self.wants_json:
+            self.emit(rows)
+            return 0
+        if not rows:
+            self.muted(empty)
+            return 0
+        self.table([h for h, _ in columns], [[cell(row.get(k)) for _, k in columns] for row in rows])
+        return 0
+
+    def show(self, item: dict, keys: list[tuple[str, str]] | None = None) -> int:
+        """Print one object as aligned ``label  value`` pairs, or JSON with ``--json``."""
+        if self.wants_json:
+            self.emit(item)
+            return 0
+        pairs = keys or [(k.replace("_", " "), k) for k in item]
+        self.pairs([(label, cell(item.get(k), wide=True)) for label, k in pairs])
+        return 0
+
     def fail_with(self, error: Exception) -> int:
         """Report a failure the way the CLI reports every failure.
 
@@ -56,6 +130,18 @@ class _Base(Command):
                 self.error(line)
         return 1
 
+    def read_password(self, question: str = "Password", *, confirm: bool = False) -> str:
+        """A hidden prompt, or ``$JANUS_PASSWORD`` when set (CI and scripts, where there is no terminal).
+
+        Never a flag: a password on the command line ends up in shell history and ``ps``.
+        """
+        value = os.environ.get("JANUS_PASSWORD")
+        if value:
+            return value
+        if not is_interactive():
+            raise CliError("No terminal to read a password from. Set JANUS_PASSWORD instead.")
+        return self.secret(question, confirm=confirm)
+
     def confirm_destructive(self, question: str) -> bool:
         """Ask before something irreversible, unless `--yes` was passed.
 
@@ -65,8 +151,6 @@ class _Base(Command):
         """
         if self.flag("yes"):
             return True
-        from sillo.console.terminal import is_interactive
-
         if not is_interactive():
             self.error("Refusing to continue without confirmation. Pass --yes.")
             return False
@@ -113,9 +197,9 @@ class ApiCommand(_Base):
 class LocalCommand(_Base):
     """A command that opens the database directly.
 
-    Deliberately rare. Anything a signed-in user could do through the dashboard
-    belongs on :class:`ApiCommand`, so that its authorization is the
-    dashboard's; this base exists for the operations that have no user behind
+    Deliberately rare. Anything a signed-in user could do through the API
+    belongs on :class:`ApiCommand`, so that its authorization is the API's;
+    this base exists for the operations that have no user behind
     them — running migrations, seeding, starting a process.
     """
 
